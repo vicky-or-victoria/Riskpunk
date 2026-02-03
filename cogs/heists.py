@@ -45,7 +45,7 @@ class HeistsCog(commands.Cog, name="Heists"):
     @heist_grp.command(name="targets", description="Browse available heist targets.")
     async def heist_targets(self, ctx: discord.ApplicationContext):
         embed = NeonEmbed(title="🎯 Heist Targets", color=NEON_CYAN)
-        embed.description = "`High-value objectives across Neo-Tokyo.`\n" + LINE
+        embed.description = "`High-value objectives across Risk City.`\n" + LINE
         for i, t in enumerate(HEIST_TARGETS):
             embed.add_field(
                 name=f"{i}. {t['name']}",
