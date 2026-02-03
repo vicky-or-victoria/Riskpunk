@@ -12,7 +12,7 @@ class PlayerCog(commands.Cog, name="Player"):
         self.bot = bot
 
     # ── /register ────────────────────────────────────────────
-    @commands.slash_command(description="Register yourself in the Neo-Tokyo grid.")
+    @commands.slash_command(description="Register yourself in the Risk City grid.")
     async def register(self, ctx: discord.ApplicationContext, name: str = discord.Option(str, "Your street name", default="Drifter")):
         existing = await get_player(ctx.author.id)
         if existing:
