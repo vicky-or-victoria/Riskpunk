@@ -111,7 +111,7 @@ class StoryCog(commands.Cog, name="Story"):
         progress = await get_story_progress(player["id"])
         if not progress:
             embed = NeonEmbed(title="📖 Story Not Started", color=NEON_CYAN)
-            embed.description = "Use `/story play` to begin your journey through Neo-Tokyo."
+            embed.description = "Use `/story play` to begin your journey through Risk City."
             await ctx.respond(embed=embed)
             return
         node = STORY_NODES.get(progress["node"], {})
