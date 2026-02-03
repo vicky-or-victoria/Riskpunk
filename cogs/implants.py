@@ -80,7 +80,7 @@ class ImplantsCog(commands.Cog, name="Implants"):
     # ── /implants install ────────────────────────────────────
     @implants_grp.command(name="install", description="Install an implant into a slot.")
     @discord.option("implant_key", description="Key from /implants shop")
-    @discord.option("slot", description="Body slot", choices=IMPLANT_SLOTS)
+    @discord.option("slot", description="Body slot", choices=["head", "eyes", "arm", "torso", "legs"])
     async def implants_install(self, ctx: discord.ApplicationContext, implant_key: str, slot: str):
         player = await get_player(ctx.author.id)
         if not player:
@@ -112,7 +112,7 @@ class ImplantsCog(commands.Cog, name="Implants"):
 
     # ── /implants remove ─────────────────────────────────────
     @implants_grp.command(name="remove", description="Remove an implant from a slot (no refund).")
-    @discord.option("slot", description="Body slot to clear", choices=IMPLANT_SLOTS)
+    @discord.option("slot", description="Body slot to clear", choices=["head", "eyes", "arm", "torso", "legs"])
     async def implants_remove(self, ctx: discord.ApplicationContext, slot: str):
         player = await get_player(ctx.author.id)
         if not player:
