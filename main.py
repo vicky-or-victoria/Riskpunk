@@ -30,103 +30,111 @@ intents.message_content = True
 intents.members         = True
 
 # ── Bot ──────────────────────────────────────────────────────────────────────
-bot = commands.Bot(
-    command_prefix="!",          # legacy prefix (unused but harmless)
-    intents=intents,
-    debug_guilds=[GUILD] if GUILD else None,
-)
+class RiskpunkBot(commands.Bot):
+    def __init__(self):
+        super().__init__(
+            command_prefix="!",
+            intents=intents,
+            debug_guilds=[GUILD] if GUILD else None,
+        )
+    
+    async def setup_hook(self):
+        """This is called when the bot is starting up, before it connects to Discord"""
+        print("🔧  Setting up bot...")
+        
+        # ── Initialise DB ──────────────────────────────────
+        from utils.database import init_db
+        await init_db()
+        print("✅  Database initialised.")
+        
+        # ── Seed factions ──────────────────────────────────
+        await self._seed_factions()
+        
+        # ── Seed territories ───────────────────────────────
+        await self._seed_territories()
+        
+        # ── Load cogs ──────────────────────────────────────
+        cogs = [
+            "cogs.player",
+            "cogs.implants",
+            "cogs.factions",
+            "cogs.trading",
+            "cogs.heists",
+            "cogs.territory",
+            "cogs.events",
+            "cogs.skills",
+            "cogs.pvp",
+            "cogs.story",
+            "cogs.leaderboard",
+        ]
+        
+        for cog in cogs:
+            try:
+                await self.load_extension(cog)
+                print(f"  📦  Loaded  {cog}")
+            except Exception as e:
+                print(f"  ❌  Failed to load {cog}: {e}")
+                import traceback
+                traceback.print_exc()
+    
+    async def _seed_factions(self):
+        """Seed initial factions if database is empty"""
+        from utils.database import get_pool
+        from utils.game_data import FACTIONS_SEED
+        pool = await get_pool()
+        async with pool.acquire() as conn:
+            count = await conn.fetchval("SELECT COUNT(*) FROM factions")
+            if count == 0:
+                for f in FACTIONS_SEED:
+                    await conn.execute(
+                        "INSERT INTO factions (key, name, description, color, aggression) VALUES ($1, $2, $3, $4, $5)",
+                        f["key"], f["name"], f["description"], f["color"], f["aggression"]
+                    )
+                print("  🏢  Seeded 5 factions.")
+    
+    async def _seed_territories(self):
+        """Seed initial territories if database is empty"""
+        from utils.database import get_pool
+        from utils.game_data import TERRITORIES_SEED
+        pool = await get_pool()
+        async with pool.acquire() as conn:
+            count = await conn.fetchval("SELECT COUNT(*) FROM territories")
+            if count == 0:
+                for t in TERRITORIES_SEED:
+                    await conn.execute(
+                        "INSERT INTO territories (key, name, description, income, defense) VALUES ($1, $2, $3, $4, $5)",
+                        t["key"], t["name"], t["description"], t["income"], t["defense"]
+                    )
+                print("  🗺️   Seeded 8 territories.")
+    
+    async def on_ready(self):
+        """Called when bot successfully connects to Discord"""
+        print("━" * 50)
+        print(f"⚡  Logged in as {self.user}  (ID: {self.user.id})")
+        print(f"🌐  Connected to {len(self.guilds)} guild(s)")
+        print("━" * 50)
+        print("🚀  Riskpunk is live.  Risk City awaits.")
+        print("━" * 50)
+    
+    async def close(self):
+        """Called when bot is shutting down"""
+        from utils.database import close_pool
+        await close_pool()
+        print("🔌  Database connection pool closed.")
+        await super().close()
 
-# ── Cog list ─────────────────────────────────────────────────────────────────
-COGS = [
-    "cogs.player",
-    "cogs.implants",
-    "cogs.factions",
-    "cogs.trading",
-    "cogs.heists",
-    "cogs.territory",
-    "cogs.events",
-    "cogs.skills",
-    "cogs.pvp",
-    "cogs.story",
-    "cogs.leaderboard",
-]
 
-
-# ── Startup ──────────────────────────────────────────────────────────────────
-@bot.event
-async def on_ready():
-    print(f"⚡  Logged in as {bot.user}  (ID: {bot.user.id})")
-    print("━" * 50)
-
-    # ── Initialise DB ──────────────────────────────────
-    from utils.database import init_db
-    await init_db()
-    print("✅  Database initialised.")
-
-    # ── Seed factions ──────────────────────────────────
-    await _seed_factions()
-
-    # ── Seed territories ───────────────────────────────
-    await _seed_territories()
-
-    # ── Load cogs ──────────────────────────────────────
-    for cog in COGS:
-        try:
-            await bot.load_extension(cog)
-            print(f"  📦  Loaded  {cog}")
-        except Exception as e:
-            print(f"  ❌  Failed to load {cog}: {e}")
-
-    print("━" * 50)
-    print("🚀  Riskpunk is live.  Risk City awaits.")
-
-
-# ── Cleanup on shutdown ──────────────────────────────────────────────────────
-@bot.event
-async def on_close():
-    from utils.database import close_pool
-    await close_pool()
-    print("🔌  Database connection pool closed.")
-
-
-# ── Seeds ────────────────────────────────────────────────────────────────────
-async def _seed_factions():
-    from utils.database import get_pool
-    from utils.game_data import FACTIONS_SEED
-    pool = await get_pool()
-    async with pool.acquire() as conn:
-        count = await conn.fetchval("SELECT COUNT(*) FROM factions")
-        if count == 0:
-            for f in FACTIONS_SEED:
-                await conn.execute(
-                    "INSERT INTO factions (key, name, description, color, aggression) VALUES ($1, $2, $3, $4, $5)",
-                    f["key"], f["name"], f["description"], f["color"], f["aggression"]
-                )
-            print("  🏢  Seeded 5 factions.")
-
-
-async def _seed_territories():
-    from utils.database import get_pool
-    from utils.game_data import TERRITORIES_SEED
-    pool = await get_pool()
-    async with pool.acquire() as conn:
-        count = await conn.fetchval("SELECT COUNT(*) FROM territories")
-        if count == 0:
-            for t in TERRITORIES_SEED:
-                await conn.execute(
-                    "INSERT INTO territories (key, name, description, income, defense) VALUES ($1, $2, $3, $4, $5)",
-                    t["key"], t["name"], t["description"], t["income"], t["defense"]
-                )
-            print("  🗺️   Seeded 8 territories.")
+# Create bot instance
+bot = RiskpunkBot()
 
 
 # ── /help ────────────────────────────────────────────────────────────────────
-@bot.slash_command(name="help", description="NeonLedger command overview.")
+@bot.slash_command(name="help", description="Riskpunk command overview.")
 async def help_cmd(ctx: discord.ApplicationContext):
     from utils.styles import NeonEmbed, LINE, NEON_CYAN
-    embed = NeonEmbed(title="⚡ NEONLEDGER — Command Guide", color=NEON_CYAN)
+    embed = NeonEmbed(title="⚡ RISKPUNK — Command Guide", color=NEON_CYAN)
     embed.description = (
-        "`Economic Political Simulator — Riskpunk`\n"
+        "`Economic Political Simulator — Risk City`\n"
         f"{LINE}"
     )
     sections = {
