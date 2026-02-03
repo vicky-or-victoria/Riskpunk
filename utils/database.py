@@ -306,6 +306,16 @@ async def heal_player(player_id: int, amount: int):
         )
 
 
+async def update_player_hp(discord_id: int, hp_change: int):
+    """Update player HP by discord_id (can be positive or negative)"""
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        await conn.execute(
+            "UPDATE players SET hp = GREATEST(0, LEAST(hp + $1, max_hp)) WHERE discord_id = $2",
+            hp_change, discord_id
+        )
+
+
 async def set_player_faction(player_id: int, faction_id: int):
     pool = await get_pool()
     async with pool.acquire() as conn:
@@ -365,6 +375,13 @@ async def get_faction_by_key(key: str):
         return await conn.fetchrow("SELECT * FROM factions WHERE key = $1", key)
 
 
+async def get_faction_members(faction_id: int):
+    """Get all players belonging to a faction"""
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        return await conn.fetch("SELECT * FROM players WHERE faction_id = $1", faction_id)
+
+
 async def set_faction_war(faction_id: int, target_id: int):
     pool = await get_pool()
     async with pool.acquire() as conn:
@@ -380,6 +397,21 @@ async def create_faction_war(faction_a: int, faction_b: int):
         return await conn.fetchrow(
             "INSERT INTO faction_wars (faction_a, faction_b) VALUES ($1, $2) RETURNING *",
             faction_a, faction_b
+        )
+
+
+async def declare_war(faction_a: int, faction_b: int):
+    """Alias for create_faction_war for compatibility"""
+    return await create_faction_war(faction_a, faction_b)
+
+
+async def resolve_war(war_id: int, winner_id: int):
+    """End a war and declare a winner"""
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        await conn.execute(
+            "UPDATE faction_wars SET ended_at = CURRENT_TIMESTAMP, winner = $1 WHERE id = $2",
+            winner_id, war_id
         )
 
 
@@ -410,6 +442,33 @@ async def get_territory_by_key(key: str):
     pool = await get_pool()
     async with pool.acquire() as conn:
         return await conn.fetchrow("SELECT * FROM territories WHERE key = $1", key)
+
+
+async def get_territory(territory_id: int):
+    """Get territory by ID"""
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        return await conn.fetchrow("SELECT * FROM territories WHERE id = $1", territory_id)
+
+
+async def claim_territory(territory_key: str, faction_id: int):
+    """Claim a territory for a faction"""
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        await conn.execute(
+            "UPDATE territories SET owner_faction = $1 WHERE key = $2",
+            faction_id, territory_key
+        )
+
+
+async def damage_territory(territory_id: int, damage: int):
+    """Reduce territory defense"""
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        await conn.execute(
+            "UPDATE territories SET defense = GREATEST(0, defense - $1) WHERE id = $2",
+            damage, territory_id
+        )
 
 
 async def set_territory_owner(territory_id: int, faction_id: int):
