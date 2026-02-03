@@ -78,7 +78,7 @@ async def on_ready():
             print(f"  ❌  Failed to load {cog}: {e}")
 
     print("━" * 50)
-    print("🚀  NeonLedger is live.  Neo-Tokyo awaits.")
+    print("🚀  Riskpunk is live.  Risk City awaits.")
 
 
 # ── Cleanup on shutdown ──────────────────────────────────────────────────────
@@ -126,7 +126,7 @@ async def help_cmd(ctx: discord.ApplicationContext):
     from utils.styles import NeonEmbed, LINE, NEON_CYAN
     embed = NeonEmbed(title="⚡ NEONLEDGER — Command Guide", color=NEON_CYAN)
     embed.description = (
-        "`Economic Political Simulator — Neo-Tokyo`\n"
+        "`Economic Political Simulator — Riskpunk`\n"
         f"{LINE}"
     )
     sections = {
