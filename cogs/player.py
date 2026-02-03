@@ -34,7 +34,7 @@ class PlayerCog(commands.Cog, name="Player"):
 
     # ── /profile ─────────────────────────────────────────────
     @commands.slash_command(description="View your (or another runner's) full profile.")
-    async def profile(self, ctx: discord.ApplicationContext, target: discord.Option(discord.Member, "Target runner", required=False) is None):
+    async def profile(self, ctx: discord.ApplicationContext, target: discord.Member = None):
         target_member = target or ctx.author
         player = await get_player(target_member.id)
         if not player:
