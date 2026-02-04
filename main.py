@@ -111,6 +111,7 @@ class RiskpunkBot(commands.Bot):
             "cogs.story",
             "cogs.leaderboard",
             "cogs.companies",
+            "cogs.territory_visual_map",
         ]
         
         loaded = 0
