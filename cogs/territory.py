@@ -22,7 +22,7 @@ class TerritoryCog(commands.Cog, name="Territory"):
     @territory_grp.command(name="map", description="View all territories on the grid.")
     async def territory_map(self, ctx: discord.ApplicationContext):
         territories = await get_all_territories()
-        embed = RiskEmbed(title="🗺️ NEO‑TOKYO TERRITORY MAP", color=NEON_BLUE)
+        embed = RiskEmbed(title="🗺️ RISK CITY TERRITORY MAP", color=NEON_BLUE)
         embed.description = "`Real‑time control overview.`\n" + LINE
         for t in territories:
             owner_name = "Unclaimed"
