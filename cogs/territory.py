@@ -7,7 +7,7 @@ from utils.database import (
     claim_territory, damage_territory, get_faction,
     get_faction_members, update_player_credits, update_player_xp
 )
-from utils.styles import territory_card, NeonEmbed, NEON_CYAN, NEON_GREEN, NEON_RED, NEON_BLUE, LINE
+from utils.styles import RiskEmbed, NEON_CYAN, NEON_GREEN, NEON_RED, NEON_BLUE, LINE
 
 
 class TerritoryCog(commands.Cog, name="Territory"):
@@ -22,7 +22,7 @@ class TerritoryCog(commands.Cog, name="Territory"):
     @territory_grp.command(name="map", description="View all territories on the grid.")
     async def territory_map(self, ctx: discord.ApplicationContext):
         territories = await get_all_territories()
-        embed = NeonEmbed(title="🗺️ NEO‑TOKYO TERRITORY MAP", color=NEON_BLUE)
+        embed = RiskEmbed(title="🗺️ NEO‑TOKYO TERRITORY MAP", color=NEON_BLUE)
         embed.description = "`Real‑time control overview.`\n" + LINE
         for t in territories:
             owner_name = "Unclaimed"
@@ -48,7 +48,7 @@ class TerritoryCog(commands.Cog, name="Territory"):
     async def territory_info(self, ctx: discord.ApplicationContext, territory_key: str):
         t = await get_territory(territory_key.lower())
         if not t:
-            await ctx.respond(embed=NeonEmbed(title="❌ Not Found", description=f"`{territory_key}` is not a valid territory.", color=NEON_RED), ephemeral=True)
+            await ctx.respond(embed=RiskEmbed(title="❌ Not Found", description=f"`{territory_key}` is not a valid territory.", color=NEON_RED), ephemeral=True)
             return
         owner_name = "Unclaimed"
         if t["owner_faction"]:
@@ -66,15 +66,15 @@ class TerritoryCog(commands.Cog, name="Territory"):
             return
         t = await get_territory(territory_key.lower())
         if not t:
-            await ctx.respond(embed=NeonEmbed(title="❌ Not Found", color=NEON_RED), ephemeral=True)
+            await ctx.respond(embed=RiskEmbed(title="❌ Not Found", color=NEON_RED), ephemeral=True)
             return
         if t["owner_faction"] == player["faction_id"]:
-            await ctx.respond(embed=NeonEmbed(title="Already Yours", description="Your faction controls this territory.", color=NEON_CYAN), ephemeral=True)
+            await ctx.respond(embed=RiskEmbed(title="Already Yours", description="Your faction controls this territory.", color=NEON_CYAN), ephemeral=True)
             return
         # Cost to attack: 10% of territory income × difficulty (defense / 10)
         attack_cost = t["income"] * 0.1 * max(1, t["defense"] / 10)
         if player["credits"] < attack_cost:
-            await ctx.respond(embed=NeonEmbed(title="💸 Insufficient Funds", description=f"Attack costs `{attack_cost:,.0f} ₵`", color=NEON_RED), ephemeral=True)
+            await ctx.respond(embed=RiskEmbed(title="💸 Insufficient Funds", description=f"Attack costs `{attack_cost:,.0f} ₵`", color=NEON_RED), ephemeral=True)
             return
         await update_player_credits(ctx.author.id, -attack_cost)
         # Gather your faction's war power
@@ -114,7 +114,7 @@ class TerritoryCog(commands.Cog, name="Territory"):
             log_lines.append(f"💀 Attack failed.  {t['name']} defense strengthened.")
             color = NEON_RED
 
-        embed = NeonEmbed(title="⚔️ TERRITORY BATTLE", color=color)
+        embed = RiskEmbed(title="⚔️ TERRITORY BATTLE", color=color)
         embed.description = "\n".join(log_lines)
         embed.add_field(name="💵 Cost", value=f"`{attack_cost:,.0f} ₵` deducted", inline=True)
         await ctx.respond(embed=embed)
@@ -130,19 +130,19 @@ class TerritoryCog(commands.Cog, name="Territory"):
             return
         t = await get_territory(territory_key.lower())
         if not t:
-            await ctx.respond(embed=NeonEmbed(title="❌ Not Found", color=NEON_RED), ephemeral=True)
+            await ctx.respond(embed=RiskEmbed(title="❌ Not Found", color=NEON_RED), ephemeral=True)
             return
         if t["owner_faction"] != player["faction_id"]:
             await ctx.respond(content="You can only fortify your own faction's territory.", ephemeral=True)
             return
         cost = amount * 50
         if player["credits"] < cost:
-            await ctx.respond(embed=NeonEmbed(title="💸 Can't Afford", description=f"Costs `{cost:,} ₵`", color=NEON_RED), ephemeral=True)
+            await ctx.respond(embed=RiskEmbed(title="💸 Can't Afford", description=f"Costs `{cost:,} ₵`", color=NEON_RED), ephemeral=True)
             return
         # Cap at 100
         actual = min(amount, 100 - t["defense"])
         if actual <= 0:
-            await ctx.respond(embed=NeonEmbed(title="Already Maxed", description="Defense is already at 100.", color=NEON_CYAN), ephemeral=True)
+            await ctx.respond(embed=RiskEmbed(title="Already Maxed", description="Defense is already at 100.", color=NEON_CYAN), ephemeral=True)
             return
         real_cost = actual * 50
         await update_player_credits(ctx.author.id, -real_cost)
@@ -150,7 +150,7 @@ class TerritoryCog(commands.Cog, name="Territory"):
         async with await get_db() as db:
             await db.execute("UPDATE territories SET defense = defense + ? WHERE key = ?", (actual, t["key"]))
             await db.commit()
-        embed = NeonEmbed(title="🏰 Fortified", color=NEON_GREEN)
+        embed = RiskEmbed(title="🏰 Fortified", color=NEON_GREEN)
         embed.description = f"**{t['name']}** defense +{actual}  ┆  Cost: `{real_cost:,} ₵`"
         await ctx.respond(embed=embed)
 

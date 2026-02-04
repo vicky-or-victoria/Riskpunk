@@ -8,7 +8,7 @@ from utils.database import (
     get_all_territories, claim_territory, update_player_credits, update_player_xp
 )
 from utils.game_data import FACTIONS_SEED
-from utils.styles import faction_card, NeonEmbed, NEON_CYAN, NEON_RED, NEON_GREEN, NEON_MAGENTA, LINE, FACTION_COLORS
+from utils.styles import RiskEmbed, NEON_CYAN, NEON_RED, NEON_GREEN, NEON_MAGENTA, LINE, FACTION_COLORS
 
 
 class FactionsCog(commands.Cog, name="Factions"):
@@ -26,7 +26,7 @@ class FactionsCog(commands.Cog, name="Factions"):
         if not factions:
             await ctx.respond(content="No factions seeded yet — check bot startup.", ephemeral=True)
             return
-        embed = NeonEmbed(title="🏢 FACTIONS — Neo‑Tokyo", color=NEON_MAGENTA)
+        embed = RiskEmbed(title="🏢 FACTIONS — Neo‑Tokyo", color=NEON_MAGENTA)
         embed.description = "`Corporate powers that shape the grid.`\n" + LINE
         for f in factions:
             members = await get_faction_members(f["id"])
@@ -58,13 +58,13 @@ class FactionsCog(commands.Cog, name="Factions"):
                 break
         if not target:
             keys = ", ".join(f"`{f['key']}`" for f in factions)
-            await ctx.respond(embed=NeonEmbed(title="❌ Unknown Faction", description=f"Valid factions: {keys}", color=NEON_RED), ephemeral=True)
+            await ctx.respond(embed=RiskEmbed(title="❌ Unknown Faction", description=f"Valid factions: {keys}", color=NEON_RED), ephemeral=True)
             return
         if player["faction_id"] == target["id"]:
-            await ctx.respond(embed=NeonEmbed(title="Already Aligned", description=f"You already belong to **{target['name']}**.", color=NEON_CYAN), ephemeral=True)
+            await ctx.respond(embed=RiskEmbed(title="Already Aligned", description=f"You already belong to **{target['name']}**.", color=NEON_CYAN), ephemeral=True)
             return
         await set_player_faction(ctx.author.id, target["id"])
-        embed = NeonEmbed(title="🤝 Faction Joined", color=FACTION_COLORS.get(target["key"], NEON_CYAN))
+        embed = RiskEmbed(title="🤝 Faction Joined", color=FACTION_COLORS.get(target["key"], NEON_CYAN))
         embed.description = (
             f"You have pledged your loyalty to **{target['name']}**.\n"
             f"{LINE}\n"
@@ -88,7 +88,7 @@ class FactionsCog(commands.Cog, name="Factions"):
                 defender = f
                 break
         if not defender:
-            await ctx.respond(embed=NeonEmbed(title="❌ Unknown Faction", color=NEON_RED), ephemeral=True)
+            await ctx.respond(embed=RiskEmbed(title="❌ Unknown Faction", color=NEON_RED), ephemeral=True)
             return
         if attacker["id"] == defender["id"]:
             await ctx.respond(content="You can't declare war on yourself.", ephemeral=True)
@@ -98,7 +98,7 @@ class FactionsCog(commands.Cog, name="Factions"):
         for w in active_wars:
             pair = {w["faction_a"], w["faction_b"]}
             if pair == {attacker["id"], defender["id"]}:
-                await ctx.respond(embed=NeonEmbed(title="⚠️ War Already Active", description=f"**{attacker['name']}** and **{defender['name']}** are already at war.", color=NEON_RED), ephemeral=True)
+                await ctx.respond(embed=RiskEmbed(title="⚠️ War Already Active", description=f"**{attacker['name']}** and **{defender['name']}** are already at war.", color=NEON_RED), ephemeral=True)
                 return
         war = await declare_war(attacker["id"], defender["id"])
         # Simulate the war instantly with a dice roll weighted by aggression + random
@@ -121,7 +121,7 @@ class FactionsCog(commands.Cog, name="Factions"):
         for w in winners:
             await update_player_credits(w["discord_id"], 2000)
             await update_player_xp(w["discord_id"], 150)
-        embed = NeonEmbed(title="⚔️ WAR RESOLVED", color=NEON_GREEN)
+        embed = RiskEmbed(title="⚔️ WAR RESOLVED", color=NEON_GREEN)
         embed.description = (
             f"{LINE}\n"
             f"**{attacker['name']}** vs **{defender['name']}**\n"
@@ -139,10 +139,10 @@ class FactionsCog(commands.Cog, name="Factions"):
     async def factions_wars(self, ctx: discord.ApplicationContext):
         wars = await get_active_wars()
         if not wars:
-            embed = NeonEmbed(title="⚔️ No Active Wars", description="`The grid is quiet.  For now.`", color=NEON_CYAN)
+            embed = RiskEmbed(title="⚔️ No Active Wars", description="`The grid is quiet.  For now.`", color=NEON_CYAN)
             await ctx.respond(embed=embed)
             return
-        embed = NeonEmbed(title="⚔️ ACTIVE WARS", color=NEON_RED)
+        embed = RiskEmbed(title="⚔️ ACTIVE WARS", color=NEON_RED)
         for w in wars:
             fa = await get_faction(w["faction_a"])
             fb = await get_faction(w["faction_b"])

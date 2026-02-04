@@ -2,7 +2,7 @@
 import discord
 from discord.ext import commands
 from utils.database import ensure_player, get_player, get_player_implants, update_player_hp, get_faction
-from utils.styles import player_card, NeonEmbed, NEON_CYAN, NEON_GREEN, THIN_LINE
+from utils.styles import RiskEmbed, NEON_CYAN, NEON_GREEN, THIN_LINE
 
 
 class PlayerCog(commands.Cog, name="Player"):
@@ -17,7 +17,7 @@ class PlayerCog(commands.Cog, name="Player"):
         existing = await get_player(ctx.author.id)
         if existing:
             await ctx.respond(
-                embed=NeonEmbed(
+                embed=RiskEmbed(
                     title="Already Registered",
                     description=f"You are already on the grid as **{existing['name']}**.\nUse `/profile` to view your status.",
                     color=NEON_CYAN
@@ -39,7 +39,7 @@ class PlayerCog(commands.Cog, name="Player"):
         player = await get_player(target_member.id)
         if not player:
             await ctx.respond(
-                embed=NeonEmbed(title="Not Found", description="`That runner isn't on the grid yet.`", color=0xFF073A),
+                embed=RiskEmbed(title="Not Found", description="`That runner isn't on the grid yet.`", color=0xFF073A),
                 ephemeral=True
             )
             return
@@ -57,7 +57,7 @@ class PlayerCog(commands.Cog, name="Player"):
         if not player:
             await ctx.respond(content="You aren't registered yet.  Run `/register` first.", ephemeral=True)
             return
-        embed = NeonEmbed(title="💰 Credit Balance", color=NEON_GREEN)
+        embed = RiskEmbed(title="💰 Credit Balance", color=NEON_GREEN)
         embed.description = (
             f"{THIN_LINE}\n"
             f"💵  **{player['credits']:,.2f} ₵**\n"
@@ -76,18 +76,18 @@ class PlayerCog(commands.Cog, name="Player"):
         cost = amount * 50
         if player["credits"] < cost:
             await ctx.respond(
-                embed=NeonEmbed(title="💸 Insufficient Funds", description=f"Healing {amount} HP costs `{cost:,.0f} ₵`. You only have `{player['credits']:,.0f} ₵`.", color=0xFF073A),
+                embed=RiskEmbed(title="💸 Insufficient Funds", description=f"Healing {amount} HP costs `{cost:,.0f} ₵`. You only have `{player['credits']:,.0f} ₵`.", color=0xFF073A),
                 ephemeral=True
             )
             return
         heal_actual = min(amount, player["max_hp"] - player["hp"])
         if heal_actual <= 0:
-            await ctx.respond(embed=NeonEmbed(title="Already at Full HP", description="Nano-mesh is green across the board.", color=NEON_CYAN), ephemeral=True)
+            await ctx.respond(embed=RiskEmbed(title="Already at Full HP", description="Nano-mesh is green across the board.", color=NEON_CYAN), ephemeral=True)
             return
         from utils.database import update_player_credits
         await update_player_credits(ctx.author.id, -cost)
         await update_player_hp(ctx.author.id, heal_actual)
-        embed = NeonEmbed(title="🏥 Street Clinic", description=f"Healed **{heal_actual} HP** for `{cost:,.0f} ₵`.", color=NEON_GREEN)
+        embed = RiskEmbed(title="🏥 Street Clinic", description=f"Healed **{heal_actual} HP** for `{cost:,.0f} ₵`.", color=NEON_GREEN)
         await ctx.respond(embed=embed)
 
 

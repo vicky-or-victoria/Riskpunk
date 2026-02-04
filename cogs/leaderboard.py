@@ -2,7 +2,7 @@
 import discord
 from discord.ext import commands
 from utils.database import get_leaderboard
-from utils.styles import leaderboard_embed, NeonEmbed, NEON_YELLOW
+from utils.styles import RiskEmbed, NEON_YELLOW
 
 
 class LeaderboardCog(commands.Cog, name="Leaderboard"):
@@ -18,7 +18,7 @@ class LeaderboardCog(commands.Cog, name="Leaderboard"):
     async def lb_credits(self, ctx: discord.ApplicationContext):
         players = await get_leaderboard("credits", 10)
         if not players:
-            await ctx.respond(embed=NeonEmbed(title="🏆 No Data", description="No registered players yet.", color=NEON_YELLOW))
+            await ctx.respond(embed=RiskEmbed(title="🏆 No Data", description="No registered players yet.", color=NEON_YELLOW))
             return
         await ctx.respond(embed=leaderboard_embed(players, "Credits"))
 
@@ -27,7 +27,7 @@ class LeaderboardCog(commands.Cog, name="Leaderboard"):
     async def lb_level(self, ctx: discord.ApplicationContext):
         players = await get_leaderboard("level", 10)
         if not players:
-            await ctx.respond(embed=NeonEmbed(title="🏆 No Data", description="No data.", color=NEON_YELLOW))
+            await ctx.respond(embed=RiskEmbed(title="🏆 No Data", description="No data.", color=NEON_YELLOW))
             return
         await ctx.respond(embed=leaderboard_embed(players, "Level"))
 
@@ -36,7 +36,7 @@ class LeaderboardCog(commands.Cog, name="Leaderboard"):
     async def lb_rep(self, ctx: discord.ApplicationContext):
         players = await get_leaderboard("rep", 10)
         if not players:
-            await ctx.respond(embed=NeonEmbed(title="🏆 No Data", description="No data.", color=NEON_YELLOW))
+            await ctx.respond(embed=RiskEmbed(title="🏆 No Data", description="No data.", color=NEON_YELLOW))
             return
         await ctx.respond(embed=leaderboard_embed(players, "Rep"))
 

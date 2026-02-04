@@ -44,7 +44,7 @@ def inline_tag(tag: str) -> str:
 
 
 # ── Core Embed Factory ───────────────────────────────────────────────────────
-class NeonEmbed(discord.Embed):
+class RiskEmbed(discord.Embed):
     """Base embed with cyberpunk defaults."""
     def __init__(self, *, title="", description="", color=NEON_CYAN, **kwargs):
         super().__init__(
@@ -53,17 +53,17 @@ class NeonEmbed(discord.Embed):
             color=color,
             **kwargs
         )
-        self.set_footer(text="━━━ NEON LEDGER v2.077 ━━━  ┆  Neo‑Tokyo Metropolitan Grid", icon_url=None)
+        self.set_footer(text="━━━ RISKPUNK v1.0 ━━━  ┆  Risk City Underground", icon_url=None)
 
 
 # ── Specialised Embed Builders ───────────────────────────────────────────────
 
-def player_card(player, implants=None, faction_name: str = "None") -> NeonEmbed:
+def player_card(player, implants=None, faction_name: str = "None") -> RiskEmbed:
     """Full player status card."""
     hp_bar   = make_bar(player["hp"],     player["max_hp"],  12, "🟦", "⬜")
     xp_bar   = make_bar(player["xp"],     player["level"]*500, 12, "🟩", "⬛")
 
-    embed = NeonEmbed(
+    embed = RiskEmbed(
         title=player["name"],
         description=f"{THIN_LINE}\n`Street identity registered in the city grid.`\n{THIN_LINE}",
         color=NEON_CYAN
@@ -107,9 +107,9 @@ def player_card(player, implants=None, faction_name: str = "None") -> NeonEmbed:
     return embed
 
 
-def faction_card(faction, members=None) -> NeonEmbed:
+def faction_card(faction, members=None) -> RiskEmbed:
     col = FACTION_COLORS.get(faction["key"], NEON_MAGENTA)
-    embed = NeonEmbed(title=faction["name"], color=col)
+    embed = RiskEmbed(title=faction["name"], color=col)
     embed.description = f"{LINE}\n{faction['description'] or 'No intel available.'}\n{LINE}"
     embed.add_field(name="🏢 Codename", value=f"`{faction['key'].upper()}`", inline=True)
     embed.add_field(name="⚡ Aggression", value=make_bar(faction["aggression"], 100, 10, "🟥", "⬜"), inline=True)
@@ -119,8 +119,8 @@ def faction_card(faction, members=None) -> NeonEmbed:
     return embed
 
 
-def territory_card(territory, faction_name: str = "Unclaimed") -> NeonEmbed:
-    embed = NeonEmbed(title=f"🗺️ {territory['name']}", color=NEON_BLUE)
+def territory_card(territory, faction_name: str = "Unclaimed") -> RiskEmbed:
+    embed = RiskEmbed(title=f"🗺️ {territory['name']}", color=NEON_BLUE)
     embed.description = f"`{territory['description'] or 'No data.'}`"
     embed.add_field(name="🏢 Controller", value=f"`{faction_name}`", inline=True)
     embed.add_field(name="💰 Weekly Income", value=f"`{territory['income']:,.0f} ₵`", inline=True)
@@ -132,8 +132,8 @@ def territory_card(territory, faction_name: str = "Unclaimed") -> NeonEmbed:
     return embed
 
 
-def trade_board_embed(trades) -> NeonEmbed:
-    embed = NeonEmbed(title="💱 Black Market Board", color=NEON_YELLOW)
+def trade_board_embed(trades) -> RiskEmbed:
+    embed = RiskEmbed(title="💱 Black Market Board", color=NEON_YELLOW)
     embed.description = f"`Open transactions on the neural net.`\n{THIN_LINE}"
     if not trades:
         embed.add_field(name="📭 No Listings", value="The board is dark. Check back later.", inline=False)
@@ -150,9 +150,9 @@ def trade_board_embed(trades) -> NeonEmbed:
     return embed
 
 
-def heist_card(heist) -> NeonEmbed:
+def heist_card(heist) -> RiskEmbed:
     phase_colors = {"planning": NEON_BLUE, "active": NEON_ORANGE, "completed": NEON_GREEN, "failed": NEON_RED}
-    embed = NeonEmbed(
+    embed = RiskEmbed(
         title=f"🚨 HEIST — {heist['target']}",
         color=phase_colors.get(heist["phase"], NEON_CYAN)
     )
@@ -165,9 +165,9 @@ def heist_card(heist) -> NeonEmbed:
     return embed
 
 
-def event_embed(event: dict) -> NeonEmbed:
+def event_embed(event: dict) -> RiskEmbed:
     """Render a random city event announcement."""
-    embed = NeonEmbed(title=f"📢 CITY ALERT — {event['title']}", color=NEON_RED)
+    embed = RiskEmbed(title=f"📢 CITY ALERT — {event['title']}", color=NEON_RED)
     embed.description = (
         f"{GLOW_LINE}\n"
         f"{event['description']}\n"
@@ -178,8 +178,8 @@ def event_embed(event: dict) -> NeonEmbed:
     return embed
 
 
-def pvp_result_embed(p1_name, p2_name, winner_name, rounds, log_text) -> NeonEmbed:
-    embed = NeonEmbed(title="⚔️ PvP DUEL COMPLETE", color=NEON_GREEN if winner_name else NEON_RED)
+def pvp_result_embed(p1_name, p2_name, winner_name, rounds, log_text) -> RiskEmbed:
+    embed = RiskEmbed(title="⚔️ PvP DUEL COMPLETE", color=NEON_GREEN if winner_name else NEON_RED)
     embed.description = (
         f"`{p1_name}` vs `{p2_name}`\n"
         f"{LINE}\n"
@@ -191,8 +191,8 @@ def pvp_result_embed(p1_name, p2_name, winner_name, rounds, log_text) -> NeonEmb
     return embed
 
 
-def leaderboard_embed(players, sort_label: str = "Credits") -> NeonEmbed:
-    embed = NeonEmbed(title="🏆 LEADERBOARD — Richest Runners", color=NEON_YELLOW)
+def leaderboard_embed(players, sort_label: str = "Credits") -> RiskEmbed:
+    embed = RiskEmbed(title="🏆 LEADERBOARD — Richest Runners", color=NEON_YELLOW)
     embed.description = f"`Top citizens ranked by {sort_label}`\n{LINE}"
     lines = []
     medals = ["🥇", "🥈", "🥉"]
@@ -209,8 +209,8 @@ def leaderboard_embed(players, sort_label: str = "Credits") -> NeonEmbed:
     return embed
 
 
-def skill_tree_embed(player_name: str, skills: list) -> NeonEmbed:
-    embed = NeonEmbed(title=f"🧬 Skill Tree — {player_name}", color=NEON_GREEN)
+def skill_tree_embed(player_name: str, skills: list) -> RiskEmbed:
+    embed = RiskEmbed(title=f"🧬 Skill Tree — {player_name}", color=NEON_GREEN)
     embed.description = f"`Neural pathways mapped.`\n{THIN_LINE}"
     if not skills:
         embed.add_field(name="No skills unlocked", value="Visit `/skills learn` to begin.", inline=False)

@@ -8,7 +8,7 @@ from utils.database import (
     get_player_skills, log_event, add_item
 )
 from utils.game_data import HEIST_TARGETS
-from utils.styles import heist_card, NeonEmbed, NEON_CYAN, NEON_GREEN, NEON_RED, NEON_ORANGE, LINE, THIN_LINE
+from utils.styles import RiskEmbed, NEON_CYAN, NEON_GREEN, NEON_RED, NEON_ORANGE, LINE, THIN_LINE
 
 
 class HeistsCog(commands.Cog, name="Heists"):
@@ -24,10 +24,10 @@ class HeistsCog(commands.Cog, name="Heists"):
     async def heist_list(self, ctx: discord.ApplicationContext):
         heists = await get_active_heists()
         if not heists:
-            embed = NeonEmbed(title="🚨 No Active Heists", description="`The streets are quiet.  Start one with /heist create.`", color=NEON_CYAN)
+            embed = RiskEmbed(title="🚨 No Active Heists", description="`The streets are quiet.  Start one with /heist create.`", color=NEON_CYAN)
             await ctx.respond(embed=embed)
             return
-        embed = NeonEmbed(title="🚨 ACTIVE HEISTS", color=NEON_ORANGE)
+        embed = RiskEmbed(title="🚨 ACTIVE HEISTS", color=NEON_ORANGE)
         for h in heists:
             crew_ids = [x.strip() for x in h["crew"].split(",") if x.strip()]
             embed.add_field(
@@ -44,7 +44,7 @@ class HeistsCog(commands.Cog, name="Heists"):
     # ── /heist targets ───────────────────────────────────────
     @heist_grp.command(name="targets", description="Browse available heist targets.")
     async def heist_targets(self, ctx: discord.ApplicationContext):
-        embed = NeonEmbed(title="🎯 Heist Targets", color=NEON_CYAN)
+        embed = RiskEmbed(title="🎯 Heist Targets", color=NEON_CYAN)
         embed.description = "`High-value objectives across Risk City.`\n" + LINE
         for i, t in enumerate(HEIST_TARGETS):
             embed.add_field(
@@ -68,13 +68,13 @@ class HeistsCog(commands.Cog, name="Heists"):
             await ctx.respond(content="Not registered.", ephemeral=True)
             return
         if target_index < 0 or target_index >= len(HEIST_TARGETS):
-            await ctx.respond(embed=NeonEmbed(title="❌ Invalid Target", description=f"Choose 0–{len(HEIST_TARGETS)-1}", color=NEON_RED), ephemeral=True)
+            await ctx.respond(embed=RiskEmbed(title="❌ Invalid Target", description=f"Choose 0–{len(HEIST_TARGETS)-1}", color=NEON_RED), ephemeral=True)
             return
         target = HEIST_TARGETS[target_index]
         # Check player credits (planning fee = 10% of reward)
         planning_fee = target["reward"] * 0.1
         if player["credits"] < planning_fee:
-            await ctx.respond(embed=NeonEmbed(title="💸 Need Planning Fee", description=f"Fee: `{planning_fee:,.0f} ₵`", color=NEON_RED), ephemeral=True)
+            await ctx.respond(embed=RiskEmbed(title="💸 Need Planning Fee", description=f"Fee: `{planning_fee:,.0f} ₵`", color=NEON_RED), ephemeral=True)
             return
         await update_player_credits(ctx.author.id, -planning_fee)
         heist = await create_heist(player["id"], target["name"], target["reward"], target["difficulty"])
@@ -100,19 +100,19 @@ class HeistsCog(commands.Cog, name="Heists"):
             return
         heist = await get_heist(heist_id)
         if not heist:
-            await ctx.respond(embed=NeonEmbed(title="❌ Heist Not Found", color=NEON_RED), ephemeral=True)
+            await ctx.respond(embed=RiskEmbed(title="❌ Heist Not Found", color=NEON_RED), ephemeral=True)
             return
         if heist["status"] != "recruiting":
-            await ctx.respond(embed=NeonEmbed(title="❌ Not Recruiting", description=f"Heist is in `{heist['status']}` phase.", color=NEON_RED), ephemeral=True)
+            await ctx.respond(embed=RiskEmbed(title="❌ Not Recruiting", description=f"Heist is in `{heist['status']}` phase.", color=NEON_RED), ephemeral=True)
             return
         success = await join_heist(heist_id, player["id"])
         if not success:
-            await ctx.respond(embed=NeonEmbed(title="Already in Crew", description="You're already part of this heist.", color=NEON_CYAN), ephemeral=True)
+            await ctx.respond(embed=RiskEmbed(title="Already in Crew", description="You're already part of this heist.", color=NEON_CYAN), ephemeral=True)
             return
         # Refresh heist data
         heist = await get_heist(heist_id)
         crew_count = len([x for x in heist["crew"].split(",") if x.strip()])
-        embed = NeonEmbed(title="✅ Crew Updated", color=NEON_GREEN)
+        embed = RiskEmbed(title="✅ Crew Updated", color=NEON_GREEN)
         embed.description = f"You've joined **{heist['target']}**.  Crew size: `{crew_count}`"
         await ctx.respond(embed=embed)
 
@@ -126,13 +126,13 @@ class HeistsCog(commands.Cog, name="Heists"):
             return
         heist = await get_heist(heist_id)
         if not heist:
-            await ctx.respond(embed=NeonEmbed(title="❌ Heist Not Found", color=NEON_RED), ephemeral=True)
+            await ctx.respond(embed=RiskEmbed(title="❌ Heist Not Found", color=NEON_RED), ephemeral=True)
             return
         if heist["leader_id"] != player["id"]:
             await ctx.respond(content="Only the heist leader can execute.", ephemeral=True)
             return
         if heist["status"] != "recruiting":
-            await ctx.respond(embed=NeonEmbed(title="Already Executed", color=NEON_RED), ephemeral=True)
+            await ctx.respond(embed=RiskEmbed(title="Already Executed", color=NEON_RED), ephemeral=True)
             return
         crew_ids = [int(x) for x in heist["crew"].split(",") if x.strip()]
         # Find min_crew for this target
@@ -143,7 +143,7 @@ class HeistsCog(commands.Cog, name="Heists"):
                 break
         if len(crew_ids) < min_crew:
             await ctx.respond(
-                embed=NeonEmbed(
+                embed=RiskEmbed(
                     title="👥 Crew Too Small",
                     description=f"Need at least `{min_crew}` crew members.  You have `{len(crew_ids)}`.",
                     color=NEON_RED
@@ -201,7 +201,7 @@ class HeistsCog(commands.Cog, name="Heists"):
             log_lines.append("💸 All crew fined 10% of current balance.")
             color = NEON_RED
 
-        embed = NeonEmbed(title="🚨 HEIST RESULT", color=color)
+        embed = RiskEmbed(title="🚨 HEIST RESULT", color=color)
         embed.description = "\n".join(log_lines)
         await ctx.respond(embed=embed)
 

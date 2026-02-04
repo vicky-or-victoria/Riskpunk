@@ -7,7 +7,7 @@ from utils.database import (
     update_player_hp, update_player_xp, update_player_credits, log_pvp
 )
 from utils.game_data import IMPLANTS, ITEM_CATALOG
-from utils.styles import pvp_result_embed, NeonEmbed, NEON_CYAN, NEON_RED, NEON_GREEN, LINE
+from utils.styles import RiskEmbed, NEON_CYAN, NEON_RED, NEON_GREEN, LINE
 
 
 def _compute_effective_stats(player, implants, skills, inventory):
@@ -65,7 +65,7 @@ class PvPCog(commands.Cog, name="PvP"):
         # Load defender
         p2 = await get_player(opponent.id)
         if not p2:
-            await ctx.respond(embed=NeonEmbed(title="❌ Opponent Not Found", description="They aren't on the grid.", color=NEON_RED), ephemeral=True)
+            await ctx.respond(embed=RiskEmbed(title="❌ Opponent Not Found", description="They aren't on the grid.", color=NEON_RED), ephemeral=True)
             return
         if p1["id"] == p2["id"]:
             await ctx.respond(content="You can't fight yourself.", ephemeral=True)

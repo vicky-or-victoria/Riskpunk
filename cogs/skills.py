@@ -5,7 +5,7 @@ from utils.database import (
     get_player, get_player_skills, get_skill, set_skill, update_player_credits
 )
 from utils.game_data import SKILL_TREE, SKILL_BRANCHES
-from utils.styles import skill_tree_embed, NeonEmbed, NEON_CYAN, NEON_GREEN, NEON_RED, LINE, THIN_LINE
+from utils.styles import RiskEmbed, NEON_CYAN, NEON_GREEN, NEON_RED, LINE, THIN_LINE
 
 
 class SkillsCog(commands.Cog, name="Skills"):
@@ -26,7 +26,7 @@ class SkillsCog(commands.Cog, name="Skills"):
         owned = await get_player_skills(player["id"])
         owned_map = {s["skill_key"]: s["level"] for s in owned}
 
-        embed = NeonEmbed(title="🧬 SKILL TREE", color=NEON_CYAN)
+        embed = RiskEmbed(title="🧬 SKILL TREE", color=NEON_CYAN)
         embed.description = "`Neural pathway mapping.  Upgrade to unlock potential.`\n" + LINE
 
         for branch in SKILL_BRANCHES:
@@ -72,19 +72,19 @@ class SkillsCog(commands.Cog, name="Skills"):
             return
         data = SKILL_TREE.get(skill_key.lower())
         if not data:
-            await ctx.respond(embed=NeonEmbed(title="❌ Unknown Skill", description=f"`{skill_key}` not found.", color=NEON_RED), ephemeral=True)
+            await ctx.respond(embed=RiskEmbed(title="❌ Unknown Skill", description=f"`{skill_key}` not found.", color=NEON_RED), ephemeral=True)
             return
         # Check already owned
         existing = await get_skill(player["id"], skill_key.lower())
         if existing:
-            await ctx.respond(embed=NeonEmbed(title="Already Learned", description=f"Use `/skills upgrade {skill_key}` to level up.", color=NEON_CYAN), ephemeral=True)
+            await ctx.respond(embed=RiskEmbed(title="Already Learned", description=f"Use `/skills upgrade {skill_key}` to level up.", color=NEON_CYAN), ephemeral=True)
             return
         # Check prerequisite
         if data["parent"]:
             prereq = await get_skill(player["id"], data["parent"])
             if not prereq:
                 await ctx.respond(
-                    embed=NeonEmbed(
+                    embed=RiskEmbed(
                         title="🔒 Prerequisite Required",
                         description=f"Must learn `{data['parent'].replace('_', ' ').title()}` first.",
                         color=NEON_RED
@@ -94,11 +94,11 @@ class SkillsCog(commands.Cog, name="Skills"):
                 return
         # Check cost
         if player["credits"] < data["cost"]:
-            await ctx.respond(embed=NeonEmbed(title="💸 Can't Afford", description=f"Costs `{data['cost']:,} ₵`", color=NEON_RED), ephemeral=True)
+            await ctx.respond(embed=RiskEmbed(title="💸 Can't Afford", description=f"Costs `{data['cost']:,} ₵`", color=NEON_RED), ephemeral=True)
             return
         await update_player_credits(ctx.author.id, -data["cost"])
         await set_skill(player["id"], skill_key.lower(), 1)
-        embed = NeonEmbed(title="🧬 Skill Learned", color=NEON_GREEN)
+        embed = RiskEmbed(title="🧬 Skill Learned", color=NEON_GREEN)
         embed.description = (
             f"**{data['name']}** — Level 1\n"
             f"{THIN_LINE}\n"
@@ -120,24 +120,24 @@ class SkillsCog(commands.Cog, name="Skills"):
             return
         data = SKILL_TREE.get(skill_key.lower())
         if not data:
-            await ctx.respond(embed=NeonEmbed(title="❌ Unknown Skill", color=NEON_RED), ephemeral=True)
+            await ctx.respond(embed=RiskEmbed(title="❌ Unknown Skill", color=NEON_RED), ephemeral=True)
             return
         existing = await get_skill(player["id"], skill_key.lower())
         if not existing:
-            await ctx.respond(embed=NeonEmbed(title="🔒 Not Learned", description="Use `/skills learn` first.", color=NEON_RED), ephemeral=True)
+            await ctx.respond(embed=RiskEmbed(title="🔒 Not Learned", description="Use `/skills learn` first.", color=NEON_RED), ephemeral=True)
             return
         if existing["level"] >= 5:
-            await ctx.respond(embed=NeonEmbed(title="⭐ Max Level", description="Already at level 5.", color=NEON_CYAN), ephemeral=True)
+            await ctx.respond(embed=RiskEmbed(title="⭐ Max Level", description="Already at level 5.", color=NEON_CYAN), ephemeral=True)
             return
         # Upgrade cost scales: base × current_level
         upgrade_cost = data["cost"] * existing["level"]
         if player["credits"] < upgrade_cost:
-            await ctx.respond(embed=NeonEmbed(title="💸 Can't Afford", description=f"Upgrade costs `{upgrade_cost:,} ₵`", color=NEON_RED), ephemeral=True)
+            await ctx.respond(embed=RiskEmbed(title="💸 Can't Afford", description=f"Upgrade costs `{upgrade_cost:,} ₵`", color=NEON_RED), ephemeral=True)
             return
         await update_player_credits(ctx.author.id, -upgrade_cost)
         new_level = existing["level"] + 1
         await set_skill(player["id"], skill_key.lower(), new_level)
-        embed = NeonEmbed(title="⬆️ Skill Upgraded", color=NEON_GREEN)
+        embed = RiskEmbed(title="⬆️ Skill Upgraded", color=NEON_GREEN)
         embed.description = (
             f"**{data['name']}** → Level {new_level}\n"
             f"{THIN_LINE}\n"

@@ -6,7 +6,7 @@ from utils.database import (
     update_player_credits, update_player_xp
 )
 from utils.game_data import STORY_NODES
-from utils.styles import NeonEmbed, NEON_CYAN, NEON_MAGENTA, NEON_GREEN, LINE, THIN_LINE
+from utils.styles import RiskEmbed, NEON_CYAN, NEON_MAGENTA, NEON_GREEN, LINE, THIN_LINE
 
 
 class StoryChoiceView(discord.ui.View):
@@ -59,7 +59,7 @@ class StoryChoiceView(discord.ui.View):
                 await interaction.followup.send(embed=embed, view=new_view)
             else:
                 # Ending — show a final "story complete" embed
-                end_embed = NeonEmbed(title="📖 Story Complete", color=NEON_GREEN)
+                end_embed = RiskEmbed(title="📖 Story Complete", color=NEON_GREEN)
                 end_embed.description = (
                     f"`You've reached an ending.`\n"
                     f"{THIN_LINE}\n"
@@ -74,11 +74,11 @@ class StoryChoiceView(discord.ui.View):
         return bound_callback
 
 
-def _story_node_embed(node: dict, node_key: str) -> NeonEmbed:
+def _story_node_embed(node: dict, node_key: str) -> RiskEmbed:
     """Build a styled embed for a story node."""
     chapter_colors = {1: NEON_CYAN, 2: NEON_MAGENTA, 3: 0xFF6B00}
     color = chapter_colors.get(node["chapter"], NEON_CYAN)
-    embed = NeonEmbed(title=f"📖 Chapter {node['chapter']} — {node['title']}", color=color)
+    embed = RiskEmbed(title=f"📖 Chapter {node['chapter']} — {node['title']}", color=color)
     embed.description = (
         f"{LINE}\n"
         f"{node['text']}\n"
@@ -110,12 +110,12 @@ class StoryCog(commands.Cog, name="Story"):
             return
         progress = await get_story_progress(player["id"])
         if not progress:
-            embed = NeonEmbed(title="📖 Story Not Started", color=NEON_CYAN)
+            embed = RiskEmbed(title="📖 Story Not Started", color=NEON_CYAN)
             embed.description = "Use `/story play` to begin your journey through Risk City."
             await ctx.respond(embed=embed)
             return
         node = STORY_NODES.get(progress["node"], {})
-        embed = NeonEmbed(title="📖 Story Status", color=NEON_CYAN)
+        embed = RiskEmbed(title="📖 Story Status", color=NEON_CYAN)
         embed.description = (
             f"Chapter **{progress['chapter']}**\n"
             f"Current Node: `{progress['node']}`\n"
@@ -164,7 +164,7 @@ class StoryCog(commands.Cog, name="Story"):
             await ctx.respond(content="Not registered.", ephemeral=True)
             return
         await set_story_progress(player["id"], 1, "start", "RESTART")
-        embed = NeonEmbed(title="🔄 Story Restarted", color=NEON_CYAN)
+        embed = RiskEmbed(title="🔄 Story Restarted", color=NEON_CYAN)
         embed.description = "Your narrative has been rewound.  Use `/story play` to begin again."
         await ctx.respond(embed=embed)
 

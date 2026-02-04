@@ -6,7 +6,7 @@ from utils.database import (
     remove_implant, update_player_credits
 )
 from utils.game_data import IMPLANTS, IMPLANT_SLOTS
-from utils.styles import NeonEmbed, NEON_CYAN, NEON_GREEN, NEON_RED, THIN_LINE, LINE
+from utils.styles import RiskEmbed, NEON_CYAN, NEON_GREEN, NEON_RED, THIN_LINE, LINE
 
 
 class ImplantsCog(commands.Cog, name="Implants"):
@@ -25,7 +25,7 @@ class ImplantsCog(commands.Cog, name="Implants"):
             await ctx.respond(content="Not registered. Run `/register`.", ephemeral=True)
             return
         installed = await get_player_implants(player["id"])
-        embed = NeonEmbed(title="🔧 Installed Implants", color=NEON_CYAN)
+        embed = RiskEmbed(title="🔧 Installed Implants", color=NEON_CYAN)
         if not installed:
             embed.description = "`No augmentations installed.  Visit /implants shop.`"
         else:
@@ -54,7 +54,7 @@ class ImplantsCog(commands.Cog, name="Implants"):
     # ── /implants shop ───────────────────────────────────────
     @implants_grp.command(name="shop", description="Browse available implants for purchase.")
     async def implants_shop(self, ctx: discord.ApplicationContext):
-        embed = NeonEmbed(title="🏪 Implant Shop — Chrome Bazaar", color=NEON_GREEN)
+        embed = RiskEmbed(title="🏪 Implant Shop — Chrome Bazaar", color=NEON_GREEN)
         embed.description = "`Backroom surgery. No questions asked.`\n" + LINE
         # Group by slot
         by_slot = {}
@@ -88,20 +88,20 @@ class ImplantsCog(commands.Cog, name="Implants"):
             return
         implant_data = IMPLANTS.get(implant_key)
         if not implant_data:
-            await ctx.respond(embed=NeonEmbed(title="❌ Unknown Implant", description=f"`{implant_key}` doesn't exist in our catalogue.", color=NEON_RED), ephemeral=True)
+            await ctx.respond(embed=RiskEmbed(title="❌ Unknown Implant", description=f"`{implant_key}` doesn't exist in our catalogue.", color=NEON_RED), ephemeral=True)
             return
         if implant_data["slot"] != slot:
-            await ctx.respond(embed=NeonEmbed(title="❌ Slot Mismatch", description=f"**{implant_data['name']}** must go in the `{implant_data['slot']}` slot.", color=NEON_RED), ephemeral=True)
+            await ctx.respond(embed=RiskEmbed(title="❌ Slot Mismatch", description=f"**{implant_data['name']}** must go in the `{implant_data['slot']}` slot.", color=NEON_RED), ephemeral=True)
             return
         cost = implant_data["cost"]
         if player["credits"] < cost:
-            await ctx.respond(embed=NeonEmbed(title="💸 Insufficient Funds", description=f"Costs `{cost:,} ₵`. You have `{player['credits']:,.0f} ₵`.", color=NEON_RED), ephemeral=True)
+            await ctx.respond(embed=RiskEmbed(title="💸 Insufficient Funds", description=f"Costs `{cost:,} ₵`. You have `{player['credits']:,.0f} ₵`.", color=NEON_RED), ephemeral=True)
             return
         await update_player_credits(ctx.author.id, -cost)
         await install_implant(player["id"], implant_key, slot)
         bonuses = implant_data.get("bonuses", {})
         bonus_str = ", ".join(f"+{v} {k.upper()}" for k, v in bonuses.items() if v > 0)
-        embed = NeonEmbed(title="✅ Implant Installed", color=NEON_GREEN)
+        embed = RiskEmbed(title="✅ Implant Installed", color=NEON_GREEN)
         embed.description = (
             f"**{implant_data['name']}** → slot `{slot.upper()}`\n"
             f"{THIN_LINE}\n"
@@ -121,12 +121,12 @@ class ImplantsCog(commands.Cog, name="Implants"):
         installed = await get_player_implants(player["id"])
         occupied = {imp["slot"]: imp for imp in installed}
         if slot not in occupied:
-            await ctx.respond(embed=NeonEmbed(title="🔲 Slot Empty", description=f"`{slot.upper()}` is already vacant.", color=NEON_RED), ephemeral=True)
+            await ctx.respond(embed=RiskEmbed(title="🔲 Slot Empty", description=f"`{slot.upper()}` is already vacant.", color=NEON_RED), ephemeral=True)
             return
         imp = occupied[slot]
         data = IMPLANTS.get(imp["implant_key"], {})
         await remove_implant(player["id"], slot)
-        embed = NeonEmbed(title="🗑️ Implant Removed", color=NEON_CYAN)
+        embed = RiskEmbed(title="🗑️ Implant Removed", color=NEON_CYAN)
         embed.description = f"**{data.get('name', imp['implant_key'])}** extracted from `{slot.upper()}`. No refund issued."
         await ctx.respond(embed=embed)
 

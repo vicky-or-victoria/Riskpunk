@@ -1,15 +1,11 @@
-# main.py
-
 import os
 import sys
 import logging
 import traceback
 
-# Force unbuffered output
 sys.stdout = os.fdopen(sys.stdout.fileno(), 'w', buffering=1)
 sys.stderr = os.fdopen(sys.stderr.fileno(), 'w', buffering=1)
 
-# Logging setup
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s [%(levelname)s] %(message)s',
@@ -22,7 +18,6 @@ logger.info("=" * 70)
 logger.info("RISKPUNK BOT STARTING")
 logger.info("=" * 70)
 
-# Import Discord
 try:
     import discord
     from discord.ext import commands
@@ -31,7 +26,6 @@ except ImportError as e:
     logger.critical(f"Failed to import discord: {e}")
     sys.exit(1)
 
-# Load environment
 try:
     from dotenv import load_dotenv
     load_dotenv()
@@ -55,7 +49,6 @@ try:
 except:
     GUILD = None
 
-# Bot setup
 intents = discord.Intents.default()
 intents.message_content = True
 intents.members = True
@@ -73,8 +66,6 @@ class RiskpunkBot(commands.Bot):
         logger.info("Connected to Discord!")
     
     async def on_ready(self):
-        """Load cogs on first on_ready call"""
-        # Prevent loading cogs multiple times
         if self.cogs_loaded:
             logger.info("Bot reconnected")
             return
@@ -84,13 +75,11 @@ class RiskpunkBot(commands.Bot):
         logger.info(f"Guilds: {len(self.guilds)}")
         logger.info("=" * 70)
         
-        # Initialize database
         logger.info("[1/4] Initializing database...")
         try:
             from utils.database import init_db, get_pool
             await init_db()
             
-            # Test connection
             pool = await get_pool()
             async with pool.acquire() as conn:
                 await conn.fetchval("SELECT 1")
@@ -100,7 +89,6 @@ class RiskpunkBot(commands.Bot):
             logger.error(traceback.format_exc())
             return
         
-        # Seed data
         logger.info("[2/4] Seeding game data...")
         try:
             await self._seed_factions()
@@ -109,7 +97,6 @@ class RiskpunkBot(commands.Bot):
         except Exception as e:
             logger.error(f"  ⚠️  Seeding error: {e}")
         
-        # Load cogs
         logger.info("[3/4] Loading cogs...")
         cogs = [
             "cogs.player",
@@ -123,13 +110,14 @@ class RiskpunkBot(commands.Bot):
             "cogs.pvp",
             "cogs.story",
             "cogs.leaderboard",
+            "cogs.companies",
         ]
         
         loaded = 0
         for cog in cogs:
             try:
                 logger.info(f"  Loading {cog}...")
-                self.load_extension(cog)  # FIXED: Removed 'await' - load_extension is NOT async
+                self.load_extension(cog)
                 logger.info(f"    ✅ Loaded")
                 loaded += 1
             except Exception as e:
@@ -138,10 +126,8 @@ class RiskpunkBot(commands.Bot):
         
         logger.info(f"  Loaded {loaded}/{len(cogs)} cogs")
         
-        # Command sync happens automatically in py-cord
         logger.info("[4/4] Commands will sync automatically...")
         try:
-            # Get loaded commands
             slash_commands = [cmd for cmd in self.pending_application_commands]
             logger.info(f"  ✅ Registered {len(slash_commands)} slash commands")
             
@@ -198,22 +184,21 @@ class RiskpunkBot(commands.Bot):
             pass
         await super().close()
 
-# Create bot
 logger.info("Creating bot instance...")
 bot = RiskpunkBot()
 logger.info("Bot instance created")
 
-# Help command
 @bot.slash_command(name="help", description="Riskpunk command overview")
 async def help_cmd(ctx: discord.ApplicationContext):
-    from utils.styles import NeonEmbed, LINE, NEON_CYAN
-    embed = NeonEmbed(title="⚡ RISKPUNK — Command Guide", color=NEON_CYAN)
+    from utils.styles import RiskEmbed, LINE, NEON_CYAN
+    embed = RiskEmbed(title="RISKPUNK — Command Guide", color=NEON_CYAN)
     embed.description = f"`Economic Political Simulator — Risk City`\n{LINE}"
     
     sections = {
         "👤 Identity": "/register  /profile  /balance  /heal",
         "🔧 Implants": "/implants list  shop  install  remove",
         "🏢 Factions": "/factions list  join  war  wars",
+        "💼 Companies": "/company list  start  status  collect  invest  close",
         "💱 Trading": "/trade board  sell  buy  cancel  /shop  /shopbuy",
         "🚨 Heists": "/heist targets  create  join  execute  list",
         "🗺️  Territory": "/territory map  info  attack  fortify",
@@ -228,14 +213,13 @@ async def help_cmd(ctx: discord.ApplicationContext):
     
     await ctx.respond(embed=embed)
 
-# Error handler
 @bot.event
 async def on_application_command_error(ctx: discord.ApplicationContext, error):
-    from utils.styles import NeonEmbed, NEON_RED
+    from utils.styles import RiskEmbed, NEON_RED
     logger.error(f"Command error: {error}")
     logger.error(traceback.format_exc())
     
-    embed = NeonEmbed(
+    embed = RiskEmbed(
         title="💥 Error",
         description=f"`{error}`",
         color=NEON_RED
@@ -245,7 +229,6 @@ async def on_application_command_error(ctx: discord.ApplicationContext, error):
     except:
         pass
 
-# Run bot
 logger.info("Starting bot...")
 try:
     bot.run(TOKEN)

@@ -203,6 +203,23 @@ async def init_db():
             )
         """)
 
+        # ── Companies ────────────────────────────────────────
+        await conn.execute("""
+            CREATE TABLE IF NOT EXISTS companies (
+                id                  SERIAL PRIMARY KEY,
+                owner_id            INTEGER NOT NULL REFERENCES players(id) ON DELETE CASCADE,
+                company_type        TEXT NOT NULL,
+                name                TEXT NOT NULL,
+                stockpiled_minutes  NUMERIC(15, 2) NOT NULL DEFAULT 0,
+                total_invested      NUMERIC(15, 2) NOT NULL DEFAULT 0,
+                total_earned        NUMERIC(15, 2) NOT NULL DEFAULT 0,
+                last_collect        TIMESTAMP NOT NULL DEFAULT NOW(),
+                created_at          TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        await conn.execute("CREATE INDEX IF NOT EXISTS idx_companies_owner ON companies(owner_id)")
+        await conn.execute("CREATE INDEX IF NOT EXISTS idx_companies_type ON companies(company_type)")
+
 
 # ─── Player Helpers ─────────────────────────────────────────────────────────
 

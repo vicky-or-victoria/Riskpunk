@@ -6,7 +6,7 @@ from utils.database import (
     add_item, remove_item, get_inventory, update_player_credits
 )
 from utils.game_data import ITEM_CATALOG
-from utils.styles import trade_board_embed, NeonEmbed, NEON_CYAN, NEON_GREEN, NEON_RED, THIN_LINE
+from utils.styles import RiskEmbed, NEON_CYAN, NEON_GREEN, NEON_RED, THIN_LINE
 
 
 class TradingCog(commands.Cog, name="Trading"):
@@ -42,14 +42,14 @@ class TradingCog(commands.Cog, name="Trading"):
                 break
         if not owned or owned["quantity"] < quantity:
             await ctx.respond(
-                embed=NeonEmbed(title="❌ Insufficient Stock", description=f"You don't have {quantity}x `{item_name}`.", color=NEON_RED),
+                embed=RiskEmbed(title="❌ Insufficient Stock", description=f"You don't have {quantity}x `{item_name}`.", color=NEON_RED),
                 ephemeral=True
             )
             return
         # Deduct from inventory immediately (escrow)
         await remove_item(player["id"], owned["item_name"], quantity)
         listing = await create_trade(player["id"], owned["item_name"], quantity, price)
-        embed = NeonEmbed(title="📦 Listing Created", color=NEON_GREEN)
+        embed = RiskEmbed(title="📦 Listing Created", color=NEON_GREEN)
         embed.description = (
             f"**{owned['item_name']}** × {quantity}\n"
             f"{THIN_LINE}\n"
@@ -73,13 +73,13 @@ class TradingCog(commands.Cog, name="Trading"):
             cur = await db.execute("SELECT * FROM trades WHERE id = ? AND status = 'open'", (listing_id,))
             listing = await cur.fetchone()
         if not listing:
-            await ctx.respond(embed=NeonEmbed(title="❌ Listing Not Found", description="That listing doesn't exist or is already closed.", color=NEON_RED), ephemeral=True)
+            await ctx.respond(embed=RiskEmbed(title="❌ Listing Not Found", description="That listing doesn't exist or is already closed.", color=NEON_RED), ephemeral=True)
             return
         if listing["seller_id"] == player["id"]:
             await ctx.respond(content="You can't buy your own listing.", ephemeral=True)
             return
         if player["credits"] < listing["price"]:
-            await ctx.respond(embed=NeonEmbed(title="💸 Can't Afford", description=f"Price: `{listing['price']:,.0f} ₵`  ┆  You have: `{player['credits']:,.0f} ₵`", color=NEON_RED), ephemeral=True)
+            await ctx.respond(embed=RiskEmbed(title="💸 Can't Afford", description=f"Price: `{listing['price']:,.0f} ₵`  ┆  You have: `{player['credits']:,.0f} ₵`", color=NEON_RED), ephemeral=True)
             return
         # Transaction
         await update_player_credits(ctx.author.id, -listing["price"])         # buyer pays
@@ -89,7 +89,7 @@ class TradingCog(commands.Cog, name="Trading"):
         )
         await add_item(player["id"], listing["item_name"], listing["quantity"])  # buyer receives item
         await fulfill_trade(listing_id, player["id"])
-        embed = NeonEmbed(title="✅ Purchase Complete", color=NEON_GREEN)
+        embed = RiskEmbed(title="✅ Purchase Complete", color=NEON_GREEN)
         embed.description = (
             f"Acquired **{listing['item_name']}** × {listing['quantity']}\n"
             f"{THIN_LINE}\n"
@@ -110,11 +110,11 @@ class TradingCog(commands.Cog, name="Trading"):
             cur = await db.execute("SELECT * FROM trades WHERE id = ? AND status = 'open'", (listing_id,))
             listing = await cur.fetchone()
         if not listing or listing["seller_id"] != player["id"]:
-            await ctx.respond(embed=NeonEmbed(title="❌ Not Your Listing", color=NEON_RED), ephemeral=True)
+            await ctx.respond(embed=RiskEmbed(title="❌ Not Your Listing", color=NEON_RED), ephemeral=True)
             return
         await cancel_trade(listing_id)
         await add_item(player["id"], listing["item_name"], listing["quantity"])  # return escrowed items
-        embed = NeonEmbed(title="🗑️ Listing Cancelled", description=f"`{listing['item_name']}` × {listing['quantity']} returned to your inventory.", color=NEON_CYAN)
+        embed = RiskEmbed(title="🗑️ Listing Cancelled", description=f"`{listing['item_name']}` × {listing['quantity']} returned to your inventory.", color=NEON_CYAN)
         await ctx.respond(embed=embed)
 
     # ── /inventory ───────────────────────────────────────────
@@ -125,7 +125,7 @@ class TradingCog(commands.Cog, name="Trading"):
             await ctx.respond(content="Not registered.", ephemeral=True)
             return
         inv = await get_inventory(player["id"])
-        embed = NeonEmbed(title="🎒 Inventory", color=NEON_CYAN)
+        embed = RiskEmbed(title="🎒 Inventory", color=NEON_CYAN)
         if not inv:
             embed.description = "`Empty.  Nothing to show.`"
         else:
@@ -141,7 +141,7 @@ class TradingCog(commands.Cog, name="Trading"):
     # ── /shop ────────────────────────────────────────────────
     @discord.slash_command(description="Buy items from the city shop.")
     async def shop(self, ctx: discord.ApplicationContext):
-        embed = NeonEmbed(title="🏪 City Shop", color=NEON_GREEN)
+        embed = RiskEmbed(title="🏪 City Shop", color=NEON_GREEN)
         embed.description = "`Standard procurement.  No questions.`\n"
         for name, data in ITEM_CATALOG.items():
             embed.add_field(
@@ -172,16 +172,16 @@ class TradingCog(commands.Cog, name="Trading"):
                 found_name = name
                 break
         if not found_name:
-            await ctx.respond(embed=NeonEmbed(title="❌ Item Not Found", color=NEON_RED), ephemeral=True)
+            await ctx.respond(embed=RiskEmbed(title="❌ Item Not Found", color=NEON_RED), ephemeral=True)
             return
         item = ITEM_CATALOG[found_name]
         total_cost = item["base_price"] * quantity
         if player["credits"] < total_cost:
-            await ctx.respond(embed=NeonEmbed(title="💸 Can't Afford", description=f"Total: `{total_cost:,} ₵`", color=NEON_RED), ephemeral=True)
+            await ctx.respond(embed=RiskEmbed(title="💸 Can't Afford", description=f"Total: `{total_cost:,} ₵`", color=NEON_RED), ephemeral=True)
             return
         await update_player_credits(ctx.author.id, -total_cost)
         await add_item(player["id"], found_name, quantity)
-        embed = NeonEmbed(title="✅ Purchased", color=NEON_GREEN)
+        embed = RiskEmbed(title="✅ Purchased", color=NEON_GREEN)
         embed.description = f"**{found_name}** × {quantity}  ┆  `{total_cost:,} ₵` deducted."
         await ctx.respond(embed=embed)
 

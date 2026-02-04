@@ -7,7 +7,7 @@ from utils.database import (
     get_all_territories, log_event, update_player_credits, update_player_hp
 )
 from utils.game_data import RANDOM_EVENTS
-from utils.styles import event_embed, NeonEmbed, NEON_RED
+from utils.styles import RiskEmbed, NEON_RED
 import os
 
 GUILD_ID = int(os.getenv("DISCORD_GUILD_ID", "0"))
@@ -45,7 +45,7 @@ class EventsCog(commands.Cog, name="Events"):
             try:
                 channel = await guild.create_text_channel(
                     EVENT_CHANNEL_NAME,
-                    reason="NeonLedger event channel"
+                    reason="Riskpunk event channel"
                 )
             except Exception:
                 return  # No permission

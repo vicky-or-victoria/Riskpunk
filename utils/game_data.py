@@ -135,7 +135,7 @@ FACTIONS_SEED = [
 
 # ── TERRITORIES ──────────────────────────────────────────────────────────────
 TERRITORIES_SEED = [
-    {"key": "neon_district",   "name": "Neon District",        "description": "Heart of the commercial sprawl.  Whoever controls the grid controls the cash flow.", "income": 500, "defense": 60},
+    {"key": "neon_district",   "name": "Chrome District",        "description": "Heart of the commercial sprawl.  Whoever controls the grid controls the cash flow.", "income": 500, "defense": 60},
     {"key": "the_slab",        "name": "The Slab",             "description": "Low‑income mega‑tenement block.  Underworld thrives here.", "income": 150, "defense": 30},
     {"key": "orbital_dock",    "name": "Orbital Dock 7",       "description": "Primary off‑world cargo hub.  Strategic chokepoint.", "income": 700, "defense": 80},
     {"key": "chrome_bazaar",   "name": "Chrome Bazaar",        "description": "Black‑market implant hub.  Questionable surgeons, excellent stock.", "income": 400, "defense": 45},
@@ -514,5 +514,5 @@ ITEM_CATALOG = {
     "Stealth Suit":      {"base_price": 3500,  "spd_bonus": 4},
     "Armour Vest":       {"base_price": 2500,  "def_bonus": 5},
     "Data Shard":        {"base_price": 1000,  "special": "story_hint"},
-    "Neon Dye Pack":     {"base_price": 200,   "special": "cosmetic"},
+    "Chrome Dye Pack":     {"base_price": 200,   "special": "cosmetic"},
 }
