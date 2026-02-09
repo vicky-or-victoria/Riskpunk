@@ -2,7 +2,7 @@
 import discord
 from discord.ext import commands
 from utils.database import ensure_player, get_player, get_player_implants, update_player_hp, get_faction
-from utils.styles import RiskEmbed, NEON_CYAN, NEON_GREEN, THIN_LINE
+from utils.styles import RiskEmbed, NEON_CYAN, NEON_GREEN, THIN_LINE, player_card
 
 
 class PlayerCog(commands.Cog, name="Player"):
