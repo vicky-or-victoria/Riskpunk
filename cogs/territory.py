@@ -1,50 +1,92 @@
-# cogs/territory.py
 import discord
-import random
 from discord.ext import commands
+import random
 from utils.database import (
-    get_player, get_all_territories, get_territory,
-    claim_territory, damage_territory, get_faction,
-    get_faction_members, update_player_credits, update_player_xp
+    get_pool, get_player, get_faction,
+    update_player_credits, update_player_xp,
+    get_all_territories, get_territory
 )
 from utils.styles import RiskEmbed, NEON_CYAN, NEON_GREEN, NEON_RED, NEON_BLUE, LINE
 
+# Import the visual map function
+try:
+    from cogs.territory_visual_map import MapView, generate_map_image, create_text_map, PIL_AVAILABLE
+    VISUAL_MAP_AVAILABLE = True
+except:
+    VISUAL_MAP_AVAILABLE = False
+    print("[TERRITORY] Warning: Visual map not available")
 
-class TerritoryCog(commands.Cog, name="Territory"):
-    """Territory control — seize, defend, profit."""
 
+def territory_card(t, owner_name):
+    e = RiskEmbed(title=f"📍 {t['name']}", color=NEON_CYAN)
+    e.description = f"`{t['description']}`\n{LINE}"
+    e.add_field(name="Owner", value=owner_name, inline=True)
+    e.add_field(name="Income", value=f"`{t['income']:,.0f} ₵/wk`", inline=True)
+    e.add_field(name="Defense", value=f"`{t['defense']}/100`", inline=True)
+    return e
+
+
+class Territory(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
-
-    territory_grp = discord.SlashCommandGroup("territory", "Territory control.")
+    
+    territory_grp = discord.SlashCommandGroup("territory", "Territory warfare commands")
 
     # ── /territory map ───────────────────────────────────────
-    @territory_grp.command(name="map", description="View all territories on the grid.")
+    @territory_grp.command(name="map", description="View visual territory control map")
     async def territory_map(self, ctx: discord.ApplicationContext):
+        """Visual map - replaces old text list"""
+        player = await get_player(ctx.author.id)
+        if not player:
+            return await ctx.respond("Register first with `/register`.", ephemeral=True)
+        
+        await ctx.defer()
+        
+        # Try visual map first
+        if VISUAL_MAP_AVAILABLE and PIL_AVAILABLE:
+            try:
+                img = await generate_map_image(player['faction_id'])
+                if img:
+                    file = discord.File(img, filename="map.png")
+                    embed = RiskEmbed(title="🗺️ RISK CITY MAP", color=NEON_CYAN)
+                    embed.description = "Click district buttons below to interact with territories."
+                    embed.set_image(url="attachment://map.png")
+                    view = MapView(player['id'], player['faction_id'], has_image=True)
+                    return await ctx.followup.send(embed=embed, file=file, view=view)
+            except Exception as e:
+                print(f"[TERRITORY MAP] Image generation failed: {e}")
+        
+        # Fallback to text map
+        if VISUAL_MAP_AVAILABLE:
+            try:
+                text_map = await create_text_map(player['faction_id'])
+                embed = RiskEmbed(title="🗺️ RISK CITY MAP", color=NEON_CYAN)
+                embed.description = text_map
+                view = MapView(player['id'], player['faction_id'], has_image=False)
+                return await ctx.followup.send(embed=embed, view=view)
+            except Exception as e:
+                print(f"[TERRITORY MAP] Text map failed: {e}")
+        
+        # Ultra fallback - simple list
         territories = await get_all_territories()
-        embed = RiskEmbed(title="🗺️ RISK CITY TERRITORY MAP", color=NEON_BLUE)
-        embed.description = "`Real‑time control overview.`\n" + LINE
+        embed = RiskEmbed(title="🗺️ RISK CITY TERRITORIES", color=NEON_BLUE)
+        embed.description = "Territory overview\n" + LINE
         for t in territories:
             owner_name = "Unclaimed"
             if t["owner_faction"]:
                 fac = await get_faction(t["owner_faction"])
                 owner_name = fac["name"] if fac else "Unknown"
-            status_emoji = "🟢" if t["owner_faction"] else "⚪"
+            status = "🟢" if t["owner_faction"] == player['faction_id'] else "🔴" if t["owner_faction"] else "⚪"
             embed.add_field(
-                name=f"{status_emoji} {t['name']}",
-                value=(
-                    f"`{t['description']}`\n"
-                    f"🏢 Owner: **{owner_name}**  ┆  "
-                    f"🛡️ Def: `{t['defense']}/100`  ┆  "
-                    f"💰 `{t['income']:,.0f} ₵/wk`"
-                ),
+                name=f"{status} {t['name']}",
+                value=f"Owner: **{owner_name}** | Def: `{t['defense']}/100` | `{t['income']:,} ₵/wk`",
                 inline=False
             )
-        await ctx.respond(embed=embed)
+        await ctx.followup.send(embed=embed)
 
     # ── /territory info ──────────────────────────────────────
     @territory_grp.command(name="info", description="Detailed info on a single territory.")
-    @discord.option("territory_key", description="Territory key (e.g. neon_district)")
+    @discord.option("territory_key", description="Territory key (e.g. industrial_sector)")
     async def territory_info(self, ctx: discord.ApplicationContext, territory_key: str):
         t = await get_territory(territory_key.lower())
         if not t:
@@ -57,103 +99,124 @@ class TerritoryCog(commands.Cog, name="Territory"):
         await ctx.respond(embed=territory_card(t, owner_name))
 
     # ── /territory attack ────────────────────────────────────
-    @territory_grp.command(name="attack", description="Attack a territory to seize it (costs credits + rolls vs defense).")
+    @territory_grp.command(name="attack", description="Attack a territory to seize it")
     @discord.option("territory_key", description="Territory key")
     async def territory_attack(self, ctx: discord.ApplicationContext, territory_key: str):
         player = await get_player(ctx.author.id)
         if not player or not player["faction_id"]:
-            await ctx.respond(content="You must belong to a faction to attack.", ephemeral=True)
+            await ctx.respond(content="You must join a faction first!", ephemeral=True)
             return
         t = await get_territory(territory_key.lower())
         if not t:
             await ctx.respond(embed=RiskEmbed(title="❌ Not Found", color=NEON_RED), ephemeral=True)
             return
         if t["owner_faction"] == player["faction_id"]:
-            await ctx.respond(embed=RiskEmbed(title="Already Yours", description="Your faction controls this territory.", color=NEON_CYAN), ephemeral=True)
+            await ctx.respond(embed=RiskEmbed(title="Already Yours", description="Your faction controls this.", color=NEON_CYAN), ephemeral=True)
             return
-        # Cost to attack: 10% of territory income × difficulty (defense / 10)
-        attack_cost = t["income"] * 0.1 * max(1, t["defense"] / 10)
+        
+        attack_cost = 500
         if player["credits"] < attack_cost:
-            await ctx.respond(embed=RiskEmbed(title="💸 Insufficient Funds", description=f"Attack costs `{attack_cost:,.0f} ₵`", color=NEON_RED), ephemeral=True)
+            await ctx.respond(embed=RiskEmbed(title="💸 Insufficient Funds", description=f"Attack costs `{attack_cost:,} ₵`", color=NEON_RED), ephemeral=True)
             return
-        await update_player_credits(ctx.author.id, -attack_cost)
-        # Gather your faction's war power
-        your_faction = await get_faction(player["faction_id"])
-        your_members = await get_faction_members(player["faction_id"])
-        atk_power = your_faction["aggression"] + len(your_members) * 3 + random.randint(5, 40)
-        def_power = t["defense"] + random.randint(0, 30)
-        log_lines = [
-            f"🗺️ **{t['name']}**",
-            f"⚔️ ATK Power: `{atk_power}`  (aggression + crew + roll)",
-            f"🛡️ DEF Power: `{def_power}`  (base defense + roll)",
-            "─" * 30,
-        ]
-        if atk_power >= def_power:
-            # Victory — claim it
-            await claim_territory(t["key"], player["faction_id"])
-            # Reduce defense to 25 (freshly seized)
-            from utils.database import get_db
-            async with await get_db() as db:
-                await db.execute("UPDATE territories SET defense = 25 WHERE key = ?", (t["key"],))
-                await db.commit()
-            log_lines.append(f"🏆 **{your_faction['name']} SEIZED {t['name']}!**")
-            # Reward all faction members
-            for m in your_members:
-                await update_player_credits(m["discord_id"], 500)
-                await update_player_xp(m["discord_id"], 100)
-            log_lines.append(f"💰 All {your_faction['name']} members: +500 ₵ & +100 XP")
-            color = NEON_GREEN
+        
+        await update_player_credits(player['id'], -attack_cost)
+        
+        # Combat
+        player_power = player["atk"] + player["spd"] + random.randint(1, 100)
+        territory_defense = t["defense"] + random.randint(1, 100)
+        
+        if player_power > territory_defense:
+            # Victory
+            pool = await get_pool()
+            async with pool.acquire() as conn:
+                await conn.execute(
+                    "UPDATE territories SET owner_faction = $1 WHERE key = $2",
+                    player["faction_id"], territory_key.lower()
+                )
+            
+            await update_player_xp(player['id'], 500)
+            
+            fac = await get_faction(player["faction_id"])
+            embed = RiskEmbed(title="⚔️ VICTORY!", color=NEON_GREEN)
+            embed.description = (
+                f"**{t['name']}** has been captured!\n\n"
+                f"Now controlled by **{fac['name'] if fac else 'your faction'}**.\n{LINE}\n"
+                f"**Rewards:**\n"
+                f"• Territory claimed\n"
+                f"• +500 XP\n"
+                f"• Weekly income: `{t['income']:,} ₵`"
+            )
         else:
-            # Failed attack — defender defense goes up a bit
-            await damage_territory(t["key"], -10)  # negative = increase  (we flip logic)
-            # Actually increase defense
-            from utils.database import get_db
-            async with await get_db() as db:
-                await db.execute("UPDATE territories SET defense = MIN(100, defense + 10) WHERE key = ?", (t["key"],))
-                await db.commit()
-            log_lines.append(f"💀 Attack failed.  {t['name']} defense strengthened.")
-            color = NEON_RED
-
-        embed = RiskEmbed(title="⚔️ TERRITORY BATTLE", color=color)
-        embed.description = "\n".join(log_lines)
-        embed.add_field(name="💵 Cost", value=f"`{attack_cost:,.0f} ₵` deducted", inline=True)
+            # Defeat
+            damage = random.randint(10, 30)
+            pool = await get_pool()
+            async with pool.acquire() as conn:
+                await conn.execute(
+                    "UPDATE players SET hp = GREATEST(0, hp - $1) WHERE id = $2",
+                    damage, player['id']
+                )
+            
+            await update_player_xp(player['id'], 100)
+            
+            embed = RiskEmbed(title="⚔️ DEFEAT", color=NEON_RED)
+            embed.description = (
+                f"Your assault on **{t['name']}** was repelled!\n\n"
+                f"The defenders held their ground.\n{LINE}\n"
+                f"**Losses:**\n"
+                f"• -{damage} HP\n"
+                f"• -{attack_cost} ₵\n"
+                f"• +100 XP (participation)"
+            )
+        
         await ctx.respond(embed=embed)
 
     # ── /territory fortify ───────────────────────────────────
-    @territory_grp.command(name="fortify", description="Spend credits to boost a territory's defense.")
+    @territory_grp.command(name="fortify", description="Strengthen territory defenses (costs credits)")
     @discord.option("territory_key", description="Territory key")
-    @discord.option("amount", description="Defense points to add (50 ₵ each)", type=int, min_value=1, max_value=100)
-    async def territory_fortify(self, ctx: discord.ApplicationContext, territory_key: str, amount: int):
+    async def territory_fortify(self, ctx: discord.ApplicationContext, territory_key: str):
         player = await get_player(ctx.author.id)
         if not player or not player["faction_id"]:
-            await ctx.respond(content="Must belong to a faction.", ephemeral=True)
+            await ctx.respond(content="You must join a faction first!", ephemeral=True)
             return
+        
         t = await get_territory(territory_key.lower())
         if not t:
             await ctx.respond(embed=RiskEmbed(title="❌ Not Found", color=NEON_RED), ephemeral=True)
             return
+        
         if t["owner_faction"] != player["faction_id"]:
-            await ctx.respond(content="You can only fortify your own faction's territory.", ephemeral=True)
+            await ctx.respond(embed=RiskEmbed(title="❌ Not Yours", description="Can only fortify your faction's territories!", color=NEON_RED), ephemeral=True)
             return
-        cost = amount * 50
-        if player["credits"] < cost:
-            await ctx.respond(embed=RiskEmbed(title="💸 Can't Afford", description=f"Costs `{cost:,} ₵`", color=NEON_RED), ephemeral=True)
+        
+        if t["defense"] >= 100:
+            await ctx.respond(embed=RiskEmbed(title="Max Defense", description="This territory is already at maximum defense.", color=NEON_YELLOW), ephemeral=True)
             return
-        # Cap at 100
-        actual = min(amount, 100 - t["defense"])
-        if actual <= 0:
-            await ctx.respond(embed=RiskEmbed(title="Already Maxed", description="Defense is already at 100.", color=NEON_CYAN), ephemeral=True)
+        
+        fortify_cost = 1000
+        if player["credits"] < fortify_cost:
+            await ctx.respond(embed=RiskEmbed(title="💸 Insufficient Funds", description=f"Fortifying costs `{fortify_cost:,} ₵`", color=NEON_RED), ephemeral=True)
             return
-        real_cost = actual * 50
-        await update_player_credits(ctx.author.id, -real_cost)
-        from utils.database import get_db
-        async with await get_db() as db:
-            await db.execute("UPDATE territories SET defense = defense + ? WHERE key = ?", (actual, t["key"]))
-            await db.commit()
-        embed = RiskEmbed(title="🏰 Fortified", color=NEON_GREEN)
-        embed.description = f"**{t['name']}** defense +{actual}  ┆  Cost: `{real_cost:,} ₵`"
+        
+        await update_player_credits(player['id'], -fortify_cost)
+        
+        new_defense = min(100, t["defense"] + 10)
+        
+        pool = await get_pool()
+        async with pool.acquire() as conn:
+            await conn.execute(
+                "UPDATE territories SET defense = $1 WHERE key = $2",
+                new_defense, territory_key.lower()
+            )
+        
+        embed = RiskEmbed(title="🛡️ FORTIFIED", color=NEON_GREEN)
+        embed.description = (
+            f"**{t['name']}** defenses reinforced!\n\n"
+            f"Defense increased: `{t['defense']}` → `{new_defense}`\n"
+            f"Cost: `{fortify_cost:,} ₵`"
+        )
+        
         await ctx.respond(embed=embed)
 
 
 def setup(bot):
-    bot.add_cog(TerritoryCog(bot))
+    bot.add_cog(Territory(bot))
