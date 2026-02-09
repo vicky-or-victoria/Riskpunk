@@ -139,6 +139,18 @@ async def init_db():
             )
         """)
         await conn.execute("CREATE INDEX IF NOT EXISTS idx_inventory_player_id ON inventory(player_id)")
+        
+        # ── Equipped Items ───────────────────────────────────────
+        await conn.execute("""
+            CREATE TABLE IF NOT EXISTS equipped_items (
+                id          SERIAL PRIMARY KEY,
+                player_id   INTEGER NOT NULL REFERENCES players(id) ON DELETE CASCADE,
+                item_name   TEXT    NOT NULL,
+                slot        TEXT    NOT NULL,
+                UNIQUE(player_id, slot)
+            )
+        """)
+        await conn.execute("CREATE INDEX IF NOT EXISTS idx_equipped_player_id ON equipped_items(player_id)")
 
         # ── Skill Trees ──────────────────────────────────────
         await conn.execute("""
@@ -247,13 +259,23 @@ async def ensure_player(discord_id: int, name: str = "Drifter"):
         )
 
 
-async def update_player_credits(player_id: int, amount: float):
+async def update_player_credits(identifier: int, amount: float):
+    """Update player credits. Identifier can be either discord_id or player internal id.
+    We'll try to detect which one it is based on typical Discord ID size."""
     pool = await get_pool()
     async with pool.acquire() as conn:
-        await conn.execute(
-            "UPDATE players SET credits = credits + $1 WHERE id = $2",
-            amount, player_id
-        )
+        # Discord IDs are typically 17-19 digits, internal IDs are small
+        if identifier > 10000000:  # Likely a discord_id
+            await conn.execute(
+                "UPDATE players SET credits = credits + $1 WHERE discord_id = $2",
+                amount, identifier
+            )
+        else:  # Likely internal player id
+            await conn.execute(
+                "UPDATE players SET credits = credits + $1 WHERE id = $2",
+                amount, identifier
+            )
+
 
 
 async def update_player_stats(player_id: int, hp: int = None, atk: int = None, def_: int = None, spd: int = None):
@@ -286,15 +308,28 @@ async def update_player_stats(player_id: int, hp: int = None, atk: int = None, d
             await conn.execute(query, *params)
 
 
-async def update_player_xp(player_id: int, xp_gain: int):
+async def update_player_xp(identifier: int, xp_gain: int):
+    """Update player XP. Identifier can be discord_id or internal player id."""
     pool = await get_pool()
     async with pool.acquire() as conn:
-        player = await conn.fetchrow(
-            "UPDATE players SET xp = xp + $1 WHERE id = $2 RETURNING xp, level",
-            xp_gain, player_id
-        )
+        # Discord IDs are typically 17-19 digits, internal IDs are small
+        if identifier > 10000000:  # Likely a discord_id
+            player = await conn.fetchrow(
+                "UPDATE players SET xp = xp + $1 WHERE discord_id = $2 RETURNING xp, level, id",
+                xp_gain, identifier
+            )
+        else:  # Likely internal player id
+            player = await conn.fetchrow(
+                "UPDATE players SET xp = xp + $1 WHERE id = $2 RETURNING xp, level, id",
+                xp_gain, identifier
+            )
+        
+        if not player:
+            return False
+            
         new_xp = player['xp']
         level = player['level']
+        player_id = player['id']
         xp_needed = level * 1000
         if new_xp >= xp_needed:
             await conn.execute(
@@ -578,6 +613,37 @@ async def remove_item(player_id: int, item_name: str, qty: int = 1) -> bool:
                 qty, player_id, item_name
             )
         return True
+
+
+# ─── Equipment Helpers ──────────────────────────────────────────────────────
+
+async def get_equipped_items(player_id: int):
+    """Get all equipped items for a player"""
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        return await conn.fetch("SELECT * FROM equipped_items WHERE player_id = $1", player_id)
+
+
+async def equip_item(player_id: int, item_name: str, slot: str):
+    """Equip an item to a slot"""
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        await conn.execute(
+            """INSERT INTO equipped_items (player_id, item_name, slot)
+               VALUES ($1, $2, $3)
+               ON CONFLICT(player_id, slot) DO UPDATE SET item_name = $2""",
+            player_id, item_name, slot
+        )
+
+
+async def unequip_item(player_id: int, slot: str):
+    """Unequip an item from a slot"""
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        await conn.execute(
+            "DELETE FROM equipped_items WHERE player_id = $1 AND slot = $2",
+            player_id, slot
+        )
 
 
 # ─── Skill Helpers ───────────────────────────────────────────────────────────

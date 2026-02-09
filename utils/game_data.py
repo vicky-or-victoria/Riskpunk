@@ -506,14 +506,16 @@ HEIST_TARGETS = [
 
 # ── TRADEABLE ITEMS ──────────────────────────────────────────────────────────
 ITEM_CATALOG = {
-    "Assault Rifle":     {"base_price": 3000,  "atk_bonus": 5},
-    "Sniper Rifle":      {"base_price": 5000,  "atk_bonus": 8},
-    "Combat Knife":      {"base_price": 800,   "atk_bonus": 3},
-    "MedKit":            {"base_price": 1500,  "heal": 40},
-    "EMP Grenade":       {"base_price": 2000,  "special": "nullify_implants"},
-    "Hacking Rig":       {"base_price": 4000,  "special": "heist_hack_bonus"},
-    "Stealth Suit":      {"base_price": 3500,  "spd_bonus": 4},
-    "Armour Vest":       {"base_price": 2500,  "def_bonus": 5},
-    "Data Shard":        {"base_price": 1000,  "special": "story_hint"},
-    "Chrome Dye Pack":     {"base_price": 200,   "special": "cosmetic"},
+    "Assault Rifle":     {"base_price": 3000,  "atk_bonus": 5, "slot": "weapon"},
+    "Sniper Rifle":      {"base_price": 5000,  "atk_bonus": 8, "slot": "weapon"},
+    "Combat Knife":      {"base_price": 800,   "atk_bonus": 3, "slot": "weapon"},
+    "MedKit":            {"base_price": 1500,  "heal": 40, "slot": None},
+    "EMP Grenade":       {"base_price": 2000,  "special": "nullify_implants", "slot": None},
+    "Hacking Rig":       {"base_price": 4000,  "special": "heist_hack_bonus", "spd_bonus": 3, "slot": "accessory"},
+    "Stealth Suit":      {"base_price": 3500,  "spd_bonus": 4, "slot": "armor"},
+    "Armour Vest":       {"base_price": 2500,  "def_bonus": 5, "slot": "armor"},
+    "Data Shard":        {"base_price": 1000,  "special": "story_hint", "slot": None},
+    "Chrome Dye Pack":   {"base_price": 200,   "special": "cosmetic", "slot": None},
 }
+
+EQUIPMENT_SLOTS = ["weapon", "armor", "accessory"]

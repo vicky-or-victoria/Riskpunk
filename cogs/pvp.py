@@ -3,14 +3,14 @@ import discord
 import random
 from discord.ext import commands
 from utils.database import (
-    get_player, get_player_implants, get_player_skills, get_inventory,
+    get_player, get_player_implants, get_player_skills, get_equipped_items,
     update_player_hp, update_player_xp, update_player_credits, log_pvp
 )
 from utils.game_data import IMPLANTS, ITEM_CATALOG
 from utils.styles import RiskEmbed, NEON_CYAN, NEON_RED, NEON_GREEN, LINE
 
 
-def _compute_effective_stats(player, implants, skills, inventory):
+def _compute_effective_stats(player, implants, skills, equipped_items):
     """Return dict with effective atk, def, spd, max_hp after all bonuses."""
     stats = {
         "atk":    player["atk"],
@@ -35,13 +35,15 @@ def _compute_effective_stats(player, implants, skills, inventory):
             for stat, val in tree_data.get("bonus", {}).items():
                 if stat in stats:
                     stats[stat] += val * s["level"]
-    # ── Item bonuses (equipped items in inventory) ──────
-    for inv_item in inventory:
-        item_data = ITEM_CATALOG.get(inv_item["item_name"], {})
-        for key in ("atk_bonus", "def_bonus", "spd_bonus"):
-            stat_name = key.replace("_bonus", "")
-            if key in item_data:
-                stats[stat_name] += item_data[key]
+    # ── Equipment bonuses (only equipped items count) ──────
+    for eq_item in equipped_items:
+        item_data = ITEM_CATALOG.get(eq_item["item_name"], {})
+        if 'atk_bonus' in item_data:
+            stats["atk"] += item_data['atk_bonus']
+        if 'def_bonus' in item_data:
+            stats["def"] += item_data['def_bonus']
+        if 'spd_bonus' in item_data:
+            stats["spd"] += item_data['spd_bonus']
     # Clamp hp
     stats["hp"] = min(stats["hp"], stats["max_hp"])
     return stats
@@ -73,13 +75,13 @@ class PvPCog(commands.Cog, name="PvP"):
         # ── Gather full stats ─────────────────────────────
         p1_implants  = await get_player_implants(p1["id"])
         p1_skills    = await get_player_skills(p1["id"])
-        p1_inventory = await get_inventory(p1["id"])
+        p1_equipped  = await get_equipped_items(p1["id"])
         p2_implants  = await get_player_implants(p2["id"])
         p2_skills    = await get_player_skills(p2["id"])
-        p2_inventory = await get_inventory(p2["id"])
+        p2_equipped  = await get_equipped_items(p2["id"])
 
-        s1 = _compute_effective_stats(p1, p1_implants, p1_skills, p1_inventory)
-        s2 = _compute_effective_stats(p2, p2_implants, p2_skills, p2_inventory)
+        s1 = _compute_effective_stats(p1, p1_implants, p1_skills, p1_equipped)
+        s2 = _compute_effective_stats(p2, p2_implants, p2_skills, p2_equipped)
 
         # ── Simulate turn-based combat ─────────────────────
         hp1 = s1["hp"]
