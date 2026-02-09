@@ -218,6 +218,9 @@ TIER_COLORS = {
     "Empire": 0x9B59B6
 }
 
+# Default company limit
+DEFAULT_COMPANY_LIMIT = 3
+
 
 class Companies(commands.Cog):
     def __init__(self, bot):
@@ -225,67 +228,132 @@ class Companies(commands.Cog):
     
     company = SlashCommandGroup("company", "Manage your business empire")
     
+    async def _get_company_limit(self, guild_id: int) -> int:
+        """Get the company limit for a guild (default: 3)"""
+        pool = await get_pool()
+        async with pool.acquire() as conn:
+            result = await conn.fetchrow(
+                "SELECT company_limit FROM guild_settings WHERE guild_id = $1",
+                guild_id
+            )
+            return result['company_limit'] if result else DEFAULT_COMPANY_LIMIT
+    
+    async def _has_admin_perms(self, ctx: discord.ApplicationContext) -> bool:
+        """Check if user has admin permissions, bot owner, or trusted role"""
+        # Check if user is bot owner
+        app_info = await self.bot.application_info()
+        if ctx.author.id == app_info.owner.id:
+            return True
+        
+        # Check if user is guild owner
+        if ctx.guild and ctx.author.id == ctx.guild.owner_id:
+            return True
+        
+        # Check if user has administrator permission
+        if ctx.author.guild_permissions.administrator:
+            return True
+        
+        # Check for trusted role (must be named exactly "Trusted")
+        if ctx.guild:
+            trusted_role = discord.utils.get(ctx.guild.roles, name="Trusted")
+            if trusted_role and trusted_role in ctx.author.roles:
+                return True
+        
+        return False
+    
+    @company.command(name="setlimit", description="[ADMIN] Set the max company limit for this server")
+    @discord.option("limit", description="Maximum companies per player (1-20)", type=int, min_value=1, max_value=20)
+    async def set_company_limit(
+        self,
+        ctx: discord.ApplicationContext,
+        limit: int
+    ):
+        if not await self._has_admin_perms(ctx):
+            return await ctx.respond(
+                "❌ You need Administrator permissions, bot owner status, guild owner status, or the `Trusted` role to use this command.",
+                ephemeral=True
+            )
+        
+        pool = await get_pool()
+        async with pool.acquire() as conn:
+            await conn.execute(
+                """
+                INSERT INTO guild_settings (guild_id, company_limit)
+                VALUES ($1, $2)
+                ON CONFLICT (guild_id) DO UPDATE SET company_limit = $2
+                """,
+                ctx.guild_id, limit
+            )
+        
+        embed = RiskEmbed(title="⚙️ Company Limit Updated", color=NEON_GREEN)
+        embed.description = (
+            f"Company limit for this server set to **{limit}** companies per player.\n\n"
+            f"All players can now own up to {limit} businesses."
+        )
+        
+        await ctx.respond(embed=embed)
+    
+    @company.command(name="limit", description="View the current company limit for this server")
+    async def view_company_limit(self, ctx: discord.ApplicationContext):
+        limit = await self._get_company_limit(ctx.guild_id)
+        
+        embed = RiskEmbed(title="📊 Company Limit", color=NEON_CYAN)
+        embed.description = (
+            f"**Current Limit:** `{limit}` companies per player\n\n"
+            f"Admins can adjust this with `/company setlimit`"
+        )
+        
+        await ctx.respond(embed=embed, ephemeral=True)
+    
     @company.command(name="list", description="Browse available businesses by tier")
     async def list_companies(
         self, 
         ctx: discord.ApplicationContext,
         tier: discord.Option(
             str, 
-            "Filter by tier", 
+            "Filter by tier",
             choices=["All", "Starter", "Street", "Corporate", "Syndicate", "Megacorp", "Empire"],
-            required=False,
             default="All"
         )
     ):
-        player = await get_player(ctx.author.id)
-        if not player:
-            return await ctx.respond("Register first with `/register`.", ephemeral=True)
+        embed = RiskEmbed(title="🏢 Available Businesses", color=NEON_CYAN)
+        embed.description = f"`Build your criminal empire across Risk City`\n{LINE}\n"
         
-        embed = RiskEmbed(title="BUSINESS OPPORTUNITIES", color=NEON_CYAN)
-        embed.description = f"Businesses generate profit every minute. Invest to stockpile hours of earnings.\n{LINE}"
+        filtered_types = {
+            k: v for k, v in COMPANY_TYPES.items()
+            if tier == "All" or v['tier'] == tier
+        }
         
-        for key, data in COMPANY_TYPES.items():
-            if tier != "All" and data["tier"] != tier:
-                continue
+        if not filtered_types:
+            return await ctx.respond("No businesses in that tier.", ephemeral=True)
+        
+        for key, data in filtered_types.items():
+            hourly = data['income_per_min'] * 60
+            daily = hourly * 24
             
-            hourly_rate = data["income_per_min"] * 60
-            daily_rate = hourly_rate * 24
-            
-            field_value = (
-                f"{data['desc']}\n\n"
-                f"**Setup:** `{data['cost']:,} ₵`\n"
-                f"**Income:** `{data['income_per_min']:,} ₵/min` (`{hourly_rate:,} ₵/hr`)\n"
-                f"**Daily Potential:** `{daily_rate:,} ₵`\n"
-                f"**Risk:** {'🔴' * int(data['risk'] * 20)}"
-            )
             embed.add_field(
-                name=f"{data['tier']} | {data['name']}", 
-                value=field_value, 
-                inline=False
-            )
-        
-        if tier == "All":
-            embed.add_field(
-                name="Investment System",
+                name=f"{data['name']} ({data['tier']})",
                 value=(
-                    "Use `/company invest` to stockpile earnings hours.\n"
-                    "Example: Invest 5000 ₵ = buy hours based on hourly income.\n"
-                    "Collect anytime with `/company collect`."
+                    f"{data['desc']}\n"
+                    f"**Cost:** `{data['cost']:,} ₵`  ┆  **Risk:** `{int(data['risk']*100)}%`\n"
+                    f"**Hourly:** `{hourly:,} ₵`  ┆  **Daily:** `{daily:,} ₵`\n"
+                    f"`/company start {key}`"
                 ),
                 inline=False
             )
         
         await ctx.respond(embed=embed)
     
-    @company.command(name="start", description="Launch a new business")
+    @company.command(name="start", description="Start a new business")
     async def start_company(
-        self, 
+        self,
         ctx: discord.ApplicationContext,
         company_type: discord.Option(
-            str, 
-            "Type of business",
+            str,
+            "Business type to start",
             autocomplete=discord.utils.basic_autocomplete(lambda ctx: list(COMPANY_TYPES.keys()))
-        )
+        ),
+        name: discord.Option(str, "Custom name for your business", required=False)
     ):
         player = await get_player(ctx.author.id)
         if not player:
@@ -294,85 +362,88 @@ class Companies(commands.Cog):
         if company_type not in COMPANY_TYPES:
             return await ctx.respond("Invalid business type.", ephemeral=True)
         
+        # Check company limit
+        company_limit = await self._get_company_limit(ctx.guild_id)
+        
         pool = await get_pool()
         async with pool.acquire() as conn:
-            existing = await conn.fetchrow(
-                "SELECT * FROM companies WHERE owner_id = $1 AND company_type = $2",
-                player['id'], company_type
-            )
-            
-            if existing:
-                return await ctx.respond(
-                    f"You already own a {COMPANY_TYPES[company_type]['name']}.",
-                    ephemeral=True
-                )
-            
-            total_companies = await conn.fetchval(
+            current_count = await conn.fetchval(
                 "SELECT COUNT(*) FROM companies WHERE owner_id = $1",
                 player['id']
             )
-            
-            if total_companies >= 5:
-                return await ctx.respond(
-                    "Max 5 companies per player. Close one with `/company close`.",
-                    ephemeral=True
-                )
         
-        company_data = COMPANY_TYPES[company_type]
-        
-        if player['credits'] < company_data['cost']:
-            embed = RiskEmbed(title="Insufficient Funds", color=NEON_RED)
-            embed.description = (
-                f"Starting a {company_data['name']} costs `{company_data['cost']:,} ₵`.\n"
-                f"You only have `{player['credits']:,.0f} ₵`."
+        if current_count >= company_limit:
+            return await ctx.respond(
+                embed=RiskEmbed(
+                    title="🚫 Company Limit Reached",
+                    description=(
+                        f"You already own **{current_count}** businesses.\n"
+                        f"**Server Limit:** `{company_limit}` companies per player\n\n"
+                        f"Close a business with `/company close` to start a new one, "
+                        f"or ask an admin to increase the limit with `/company setlimit`"
+                    ),
+                    color=NEON_RED
+                ),
+                ephemeral=True
             )
-            return await ctx.respond(embed=embed, ephemeral=True)
         
-        await update_player_credits(player['id'], -company_data['cost'])
+        data = COMPANY_TYPES[company_type]
+        
+        if player['credits'] < data['cost']:
+            return await ctx.respond(
+                f"You need `{data['cost']:,} ₵` to start this business. You have `{player['credits']:,.0f} ₵`.",
+                ephemeral=True
+            )
+        
+        business_name = name if name else data['name']
+        
+        await update_player_credits(player['id'], -data['cost'])
         
         pool = await get_pool()
         async with pool.acquire() as conn:
-            company = await conn.fetchrow("""
-                INSERT INTO companies (owner_id, company_type, name, last_collect, stockpiled_minutes)
-                VALUES ($1, $2, $3, NOW(), 0)
+            company = await conn.fetchrow(
+                """
+                INSERT INTO companies (owner_id, company_type, name, last_collect)
+                VALUES ($1, $2, $3, NOW())
                 RETURNING *
-            """, player['id'], company_type, company_data['name'])
+                """,
+                player['id'], company_type, business_name
+            )
         
-        hourly = company_data['income_per_min'] * 60
+        embed = RiskEmbed(title="✅ Business Established", color=NEON_GREEN)
+        embed.description = f"**{business_name}**\n`{data['desc']}`\n{LINE}"
         
-        embed = RiskEmbed(title="Business Established", color=TIER_COLORS[company_data['tier']])
-        embed.description = (
-            f"**{company_data['name']}** is now operational.\n\n"
-            f"{company_data['desc']}\n{THIN_LINE}"
-        )
+        hourly = data['income_per_min'] * 60
+        daily = hourly * 24
+        
+        embed.add_field(name="💰 Setup Cost", value=f"`{data['cost']:,} ₵`", inline=True)
+        embed.add_field(name="⚠️ Risk Level", value=f"`{int(data['risk']*100)}%`", inline=True)
+        embed.add_field(name="🆔 Company ID", value=f"`{company['id']}`", inline=True)
+        
         embed.add_field(
-            name="Income",
-            value=f"`{company_data['income_per_min']:,} ₵/min` | `{hourly:,} ₵/hr`",
-            inline=True
-        )
-        embed.add_field(
-            name="Tier",
-            value=f"`{company_data['tier']}`",
-            inline=True
-        )
-        embed.add_field(
-            name="Risk Level",
-            value=f"`{int(company_data['risk']*100)}%`",
-            inline=True
-        )
-        embed.add_field(
-            name="Next Steps",
+            name="📊 Income Projections",
             value=(
-                "• Wait for profits to accumulate\n"
-                "• Use `/company invest` to stockpile hours\n"
-                "• Use `/company collect` to claim earnings"
+                f"**Per Hour:** `{hourly:,} ₵`\n"
+                f"**Per Day:** `{daily:,} ₵`\n"
+                f"**Per Week:** `{daily * 7:,} ₵`"
+            ),
+            inline=False
+        )
+        
+        embed.add_field(
+            name="📋 Next Steps",
+            value=(
+                f"• Collect earnings with `/company collect`\n"
+                f"• Invest for passive income with `/company invest`\n"
+                f"• View all businesses with `/company status`\n"
+                f"• Current Portfolio: `{current_count + 1}/{company_limit}` companies"
             ),
             inline=False
         )
         
         await ctx.respond(embed=embed)
     
-    @company.command(name="status", description="View your businesses")
+    @company.command(name="status", description="View all your businesses")
     async def company_status(self, ctx: discord.ApplicationContext):
         player = await get_player(ctx.author.id)
         if not player:
@@ -381,17 +452,22 @@ class Companies(commands.Cog):
         pool = await get_pool()
         async with pool.acquire() as conn:
             companies = await conn.fetch(
-                "SELECT * FROM companies WHERE owner_id = $1 ORDER BY created_at",
+                "SELECT * FROM companies WHERE owner_id = $1 ORDER BY id",
                 player['id']
             )
         
         if not companies:
-            embed = RiskEmbed(title="No Businesses", color=NEON_YELLOW)
-            embed.description = "You don't own any companies. Check `/company list` to start one."
-            return await ctx.respond(embed=embed)
+            return await ctx.respond(
+                "You don't own any businesses yet. Start one with `/company start`.",
+                ephemeral=True
+            )
         
-        embed = RiskEmbed(title="YOUR BUSINESS EMPIRE", color=NEON_CYAN)
-        embed.description = f"Operating {len(companies)}/5 businesses.\n{LINE}"
+        company_limit = await self._get_company_limit(ctx.guild_id)
+        
+        embed = RiskEmbed(title="🏢 Your Business Empire", color=NEON_CYAN)
+        embed.description = (
+            f"`Portfolio: {len(companies)}/{company_limit} companies`\n{LINE}\n"
+        )
         
         total_value = 0
         total_hourly = 0
@@ -400,42 +476,39 @@ class Companies(commands.Cog):
             comp_data = COMPANY_TYPES[comp['company_type']]
             
             minutes_passed = (datetime.now() - comp['last_collect']).total_seconds() / 60
-            accumulated = int(minutes_passed * comp_data['income_per_min'])
-            stockpiled = int(comp['stockpiled_minutes'] * comp_data['income_per_min'])
-            total_ready = accumulated + stockpiled
+            active_earnings = int(minutes_passed * comp_data['income_per_min'])
+            stockpiled_earnings = int(comp['stockpiled_minutes'] * comp_data['income_per_min'])
+            total_pending = active_earnings + stockpiled_earnings
             
             hourly = comp_data['income_per_min'] * 60
-            total_value += comp_data['cost'] + comp['total_invested']
             total_hourly += hourly
+            total_value += comp_data['cost'] + comp['total_invested']
             
-            stockpile_hours = comp['stockpiled_minutes'] / 60
-            
-            field_value = (
-                f"**Ready:** `{total_ready:,} ₵` ({int(minutes_passed)}m active + {stockpile_hours:.1f}h stocked)\n"
-                f"**Rate:** `{comp_data['income_per_min']:,} ₵/min` | `{hourly:,} ₵/hr`\n"
-                f"**Lifetime:** `{comp['total_earned']:,.0f} ₵`\n"
-                f"**ID:** `{comp['id']}`"
-            )
+            status_emoji = "🟢" if total_pending > 0 else "🟡"
             
             embed.add_field(
-                name=f"{comp_data['tier']} | {comp['name']}",
-                value=field_value,
+                name=f"{status_emoji} {comp['name']} (ID: {comp['id']})",
+                value=(
+                    f"**Type:** `{comp_data['tier']}`  ┆  **Risk:** `{int(comp_data['risk']*100)}%`\n"
+                    f"**Pending:** `{total_pending:,} ₵`  ┆  **Hourly:** `{hourly:,} ₵`\n"
+                    f"**Lifetime Earned:** `{comp['total_earned']:,.0f} ₵`"
+                ),
                 inline=False
             )
         
         embed.add_field(
-            name="Empire Stats",
+            name="💼 Portfolio Summary",
             value=(
-                f"**Total Invested:** `{total_value:,} ₵`\n"
-                f"**Combined Income:** `{total_hourly:,} ₵/hr`\n"
-                f"**Daily Potential:** `{total_hourly * 24:,} ₵`"
+                f"**Total Value:** `{total_value:,} ₵`\n"
+                f"**Combined Hourly:** `{total_hourly:,} ₵`\n"
+                f"**Daily Projection:** `{total_hourly * 24:,} ₵`"
             ),
             inline=False
         )
         
         await ctx.respond(embed=embed)
     
-    @company.command(name="collect", description="Collect accumulated profits")
+    @company.command(name="collect", description="Collect earnings from all businesses")
     async def collect_earnings(self, ctx: discord.ApplicationContext):
         player = await get_player(ctx.author.id)
         if not player:
@@ -449,7 +522,10 @@ class Companies(commands.Cog):
             )
         
         if not companies:
-            return await ctx.respond("You don't own any companies.", ephemeral=True)
+            return await ctx.respond(
+                "You don't own any businesses yet.",
+                ephemeral=True
+            )
         
         total_earned = 0
         results = []
@@ -468,10 +544,10 @@ class Companies(commands.Cog):
             if random.random() < comp_data['risk']:
                 event_type = random.choice(['raid', 'bust', 'crash', 'sabotage'])
                 events = {
-                    'raid': f"🚨 Raided",
-                    'bust': f"👮 Busted",
-                    'crash': f"📉 Crashed",
-                    'sabotage': f"💣 Sabotaged"
+                    'raid': f"🚨 Raided by corpo security",
+                    'bust': f"👮 Busted by law enforcement",
+                    'crash': f"📉 Market crash hit hard",
+                    'sabotage': f"💣 Sabotaged by competitors"
                 }
                 results.append({
                     'name': comp['name'],
@@ -495,15 +571,15 @@ class Companies(commands.Cog):
                 )
         
         if total_earned == 0 and not results:
-            return await ctx.respond("Nothing to collect yet.", ephemeral=True)
+            return await ctx.respond("Nothing to collect yet. Come back later!", ephemeral=True)
         
         await update_player_credits(player['id'], total_earned)
         
         embed = RiskEmbed(
-            title="COLLECTION COMPLETE",
+            title="💰 COLLECTION COMPLETE",
             color=NEON_GREEN if total_earned > 0 else NEON_YELLOW
         )
-        embed.description = f"Collected from {len(results)} businesses.\n{LINE}"
+        embed.description = f"`Collected from {len(results)} businesses`\n{LINE}\n"
         
         for result in results:
             profit_str = f"`+{result['profit']:,} ₵`" if result['profit'] > 0 else "`0 ₵`"
@@ -513,8 +589,8 @@ class Companies(commands.Cog):
             embed.add_field(name=result['name'], value=value, inline=True)
         
         embed.add_field(
-            name="Total Collected",
-            value=f"**+{total_earned:,} ₵**",
+            name="🔹 Total Collected",
+            value=f"**+{total_earned:,} ₵** added to your balance",
             inline=False
         )
         
@@ -565,10 +641,10 @@ class Companies(commands.Cog):
                 minutes_bought, amount, company_id
             )
         
-        embed = RiskEmbed(title="Investment Processed", color=NEON_GREEN)
+        embed = RiskEmbed(title="📈 Investment Processed", color=NEON_GREEN)
         embed.description = (
-            f"Invested `{amount:,} ₵` into **{company['name']}**.\n\n"
-            f"**Stockpiled:** `{hours_bought:.2f} hours` of earnings\n"
+            f"Invested `{amount:,} ₵` into **{company['name']}**.\n{LINE}\n"
+            f"**Stockpiled:** `{hours_bought:.2f} hours` of future earnings\n"
             f"**Value:** `{int(hours_bought * hourly_rate):,} ₵`\n\n"
             f"This will be available immediately on your next `/company collect`."
         )
@@ -612,7 +688,7 @@ class Companies(commands.Cog):
         async with pool.acquire() as conn:
             await conn.execute("DELETE FROM companies WHERE id = $1", company_id)
         
-        embed = RiskEmbed(title="Business Closed", color=NEON_YELLOW)
+        embed = RiskEmbed(title="🗑️ Business Closed", color=NEON_YELLOW)
         embed.description = f"Shut down **{company['name']}**.\n{LINE}"
         embed.add_field(name="Salvage Value", value=f"`{salvage_value:,} ₵` (60% of investment)", inline=True)
         embed.add_field(name="Final Payout", value=f"`{final_payout:,} ₵`", inline=True)
@@ -649,23 +725,23 @@ class Companies(commands.Cog):
         embed.description = f"**{data['tier']} Tier**\n\n{data['desc']}\n{LINE}"
         
         embed.add_field(
-            name="Setup Cost",
+            name="💰 Setup Cost",
             value=f"`{data['cost']:,} ₵`",
             inline=True
         )
         embed.add_field(
-            name="Risk Level",
+            name="⚠️ Risk Level",
             value=f"`{int(data['risk']*100)}%`",
             inline=True
         )
         embed.add_field(
-            name="Per Minute",
+            name="⚡ Per Minute",
             value=f"`{data['income_per_min']:,} ₵`",
             inline=True
         )
         
         embed.add_field(
-            name="Income Breakdown",
+            name="📊 Income Breakdown",
             value=(
                 f"**Hourly:** `{hourly:,} ₵`\n"
                 f"**Daily:** `{daily:,} ₵`\n"
@@ -677,8 +753,8 @@ class Companies(commands.Cog):
         
         roi_days = data['cost'] / daily
         embed.add_field(
-            name="Return on Investment",
-            value=f"Pays for itself in `{roi_days:.1f} days` of active earnings",
+            name="💹 Return on Investment",
+            value=f"Pays for itself in **`{roi_days:.1f} days`** of active earnings",
             inline=False
         )
         

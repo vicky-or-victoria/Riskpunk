@@ -1,5 +1,5 @@
 # utils/database.py
-# PostgreSQL/Neon Database Layer - ENHANCED VERSION
+# PostgreSQL/Neon Database Layer - ENHANCED VERSION with Companies & Guild Settings
 import asyncpg
 import os
 from typing import Optional
@@ -38,7 +38,7 @@ async def close_pool():
 
 
 async def init_db():
-    """Initialize database tables - ENHANCED VERSION"""
+    """Initialize database tables - ENHANCED VERSION with Companies & Guild Settings"""
     pool = await get_pool()
     async with pool.acquire() as conn:
         # ── Players ──────────────────────────────────────────
@@ -263,6 +263,34 @@ async def init_db():
             )
         """)
         await conn.execute("CREATE INDEX IF NOT EXISTS idx_pvp_stats_elo ON pvp_stats(elo DESC)")
+
+        # ── Companies ────────────────────────────────────────
+        await conn.execute("""
+            CREATE TABLE IF NOT EXISTS companies (
+                id                  SERIAL PRIMARY KEY,
+                owner_id            INTEGER NOT NULL REFERENCES players(id) ON DELETE CASCADE,
+                company_type        TEXT    NOT NULL,
+                name                TEXT    NOT NULL,
+                last_collect        TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                stockpiled_minutes  NUMERIC(15, 2) NOT NULL DEFAULT 0,
+                total_earned        NUMERIC(15, 2) NOT NULL DEFAULT 0,
+                total_invested      NUMERIC(15, 2) NOT NULL DEFAULT 0,
+                created_at          TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        await conn.execute("CREATE INDEX IF NOT EXISTS idx_companies_owner ON companies(owner_id)")
+        
+        # ── Guild Settings ───────────────────────────────────
+        await conn.execute("""
+            CREATE TABLE IF NOT EXISTS guild_settings (
+                id              SERIAL PRIMARY KEY,
+                guild_id        BIGINT UNIQUE NOT NULL,
+                company_limit   INTEGER NOT NULL DEFAULT 3,
+                created_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        await conn.execute("CREATE INDEX IF NOT EXISTS idx_guild_settings_guild_id ON guild_settings(guild_id)")
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -698,6 +726,7 @@ async def add_item(player_id: int, item_name: str, qty: int = 1):
 
 
 async def remove_item(player_id: int, item_name: str, qty: int = 1) -> bool:
+    """Remove qty of item from inventory; returns False if not enough."""
     pool = await get_pool()
     async with pool.acquire() as conn:
         row = await conn.fetchrow(
