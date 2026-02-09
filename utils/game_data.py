@@ -135,14 +135,15 @@ FACTIONS_SEED = [
 
 # ── TERRITORIES ──────────────────────────────────────────────────────────────
 TERRITORIES_SEED = [
-    {"key": "neon_district",   "name": "Chrome District",        "description": "Heart of the commercial sprawl.  Whoever controls the grid controls the cash flow.", "income": 500, "defense": 60},
-    {"key": "the_slab",        "name": "The Slab",             "description": "Low‑income mega‑tenement block.  Underworld thrives here.", "income": 150, "defense": 30},
-    {"key": "orbital_dock",    "name": "Orbital Dock 7",       "description": "Primary off‑world cargo hub.  Strategic chokepoint.", "income": 700, "defense": 80},
-    {"key": "chrome_bazaar",   "name": "Chrome Bazaar",        "description": "Black‑market implant hub.  Questionable surgeons, excellent stock.", "income": 400, "defense": 45},
-    {"key": "void_street",     "name": "Void Street",          "description": "Abandoned corporate campus.  Now a maze of traps and scavengers.", "income": 200, "defense": 25},
-    {"key": "ghost_quarter",   "name": "Ghost Quarter",        "description": "Signal‑dead zone.  No cameras, no comms.  Perfect for disappearing.", "income": 100, "defense": 20},
-    {"key": "power_core",      "name": "Power Core Nexus",     "description": "Feeds 40% of the metro grid.  Take it and you hold the city hostage.", "income": 900, "defense": 100},
-    {"key": "black_harbour",   "name": "Black Harbour",        "description": "Smuggler's port.  Everything moves through here eventually.", "income": 350, "defense": 55},
+    {"key": "industrial_sector", "name": "Industrial Sector", "description": "Factory sprawl where the city's heavy machinery gets built. Constant smoke and grinding metal.", "income": 400, "defense": 50},
+    {"key": "chrome_district",   "name": "Chrome District",   "description": "Heart of the commercial sprawl. Whoever controls the grid controls the cash flow.", "income": 500, "defense": 60},
+    {"key": "downtown_core",     "name": "Downtown Core",     "description": "Corporate skyscrapers and neon billboards. The economic heart of Risk City.", "income": 700, "defense": 75},
+    {"key": "port_authority",    "name": "Port Authority",    "description": "Shipping docks and smuggler's paradise. Everything flows through here eventually.", "income": 350, "defense": 55},
+    {"key": "central_plaza",     "name": "Central Plaza",     "description": "The neutral ground where deals are made. Heavily monitored, rarely safe.", "income": 300, "defense": 40},
+    {"key": "corp_towers",       "name": "Corp Towers",       "description": "Glass and steel monuments to corporate power. Heavily fortified.", "income": 900, "defense": 90},
+    {"key": "undercity",         "name": "Undercity",         "description": "The forgotten underground. No cameras, no comms, no rules.", "income": 150, "defense": 30},
+    {"key": "tech_quarter",      "name": "Tech Quarter",      "description": "Where the city's hackers and engineers congregate. Innovation and espionage.", "income": 600, "defense": 65},
+    {"key": "skyline_heights",   "name": "Skyline Heights",   "description": "Luxury apartments in the clouds. The elite look down on everyone else.", "income": 800, "defense": 80},
 ]
 
 # ── SKILL TREES ──────────────────────────────────────────────────────────────
