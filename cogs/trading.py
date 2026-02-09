@@ -67,12 +67,10 @@ class TradingCog(commands.Cog, name="Trading"):
         if not player:
             await ctx.respond(content="Not registered.", ephemeral=True)
             return
-        # Fetch the listing
-        from utils.database import get_db
-        async with await get_db() as db:
-            cur = await db.execute("SELECT * FROM trades WHERE id = ? AND status = 'open'", (listing_id,))
-            listing = await cur.fetchone()
-        if not listing:
+        # Fetch the listing using the correct get_trade function
+        from utils.database import get_trade
+        listing = await get_trade(listing_id)
+        if not listing or listing["status"] != "open":
             await ctx.respond(embed=RiskEmbed(title="❌ Listing Not Found", description="That listing doesn't exist or is already closed.", color=NEON_RED), ephemeral=True)
             return
         if listing["seller_id"] == player["id"]:
@@ -105,11 +103,10 @@ class TradingCog(commands.Cog, name="Trading"):
         if not player:
             await ctx.respond(content="Not registered.", ephemeral=True)
             return
-        from utils.database import get_db
-        async with await get_db() as db:
-            cur = await db.execute("SELECT * FROM trades WHERE id = ? AND status = 'open'", (listing_id,))
-            listing = await cur.fetchone()
-        if not listing or listing["seller_id"] != player["id"]:
+        # Fetch the listing using the correct get_trade function
+        from utils.database import get_trade
+        listing = await get_trade(listing_id)
+        if not listing or listing["status"] != "open" or listing["seller_id"] != player["id"]:
             await ctx.respond(embed=RiskEmbed(title="❌ Not Your Listing", color=NEON_RED), ephemeral=True)
             return
         await cancel_trade(listing_id)

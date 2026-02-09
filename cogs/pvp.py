@@ -148,12 +148,14 @@ class PvPCog(commands.Cog, name="PvP"):
             # Winner's HP reduced to what's left (proportional)
             if winner_id == p1["id"]:
                 # p1 won, set their HP to hp1
-                await _set_hp_absolute(p1["discord_id"], max(1, hp1))
+                from utils.database import set_hp_absolute
+                await set_hp_absolute(p1["discord_id"], max(1, hp1))
                 # p2 goes to 1 HP (beaten, not dead)
-                await _set_hp_absolute(p2["discord_id"], 1)
+                await set_hp_absolute(p2["discord_id"], 1)
             else:
-                await _set_hp_absolute(p2["discord_id"], max(1, hp2))
-                await _set_hp_absolute(p1["discord_id"], 1)
+                from utils.database import set_hp_absolute
+                await set_hp_absolute(p2["discord_id"], max(1, hp2))
+                await set_hp_absolute(p1["discord_id"], 1)
             # Loser loses 200 credits
             await update_player_credits(loser_discord, -200)
 
@@ -167,14 +169,6 @@ class PvPCog(commands.Cog, name="PvP"):
                 inline=False
             )
         await ctx.respond(embed=embed)
-
-
-# ── DB helper ────────────────────────────────────────────────────────────────
-async def _set_hp_absolute(discord_id: int, hp: int):
-    from utils.database import get_db
-    async with await get_db() as db:
-        await db.execute("UPDATE players SET hp = ? WHERE discord_id = ?", (hp, discord_id))
-        await db.commit()
 
 
 def setup(bot):

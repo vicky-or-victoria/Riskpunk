@@ -251,6 +251,19 @@ async def init_db():
             )
         """)
 
+        # ── PvP Rankings ────────────────────────────────────
+        await conn.execute("""
+            CREATE TABLE IF NOT EXISTS pvp_stats (
+                id          SERIAL PRIMARY KEY,
+                player_id   INTEGER NOT NULL REFERENCES players(id) ON DELETE CASCADE,
+                wins        INTEGER NOT NULL DEFAULT 0,
+                losses      INTEGER NOT NULL DEFAULT 0,
+                elo         INTEGER NOT NULL DEFAULT 1000,
+                UNIQUE(player_id)
+            )
+        """)
+        await conn.execute("CREATE INDEX IF NOT EXISTS idx_pvp_stats_elo ON pvp_stats(elo DESC)")
+
 
 # ═══════════════════════════════════════════════════════════════════════════
 # PLAYER HELPERS
@@ -321,6 +334,18 @@ async def update_player_hp(discord_id: int, delta: int):
         await conn.execute("UPDATE players SET hp = $1 WHERE discord_id = $2", new_hp, discord_id)
 
 
+async def set_hp_absolute(discord_id: int, hp: int):
+    """Set player HP to an absolute value (for PvP results)"""
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        player = await conn.fetchrow("SELECT max_hp FROM players WHERE discord_id = $1", discord_id)
+        if not player:
+            return
+        # Clamp HP between 0 and max_hp
+        safe_hp = max(0, min(player['max_hp'], hp))
+        await conn.execute("UPDATE players SET hp = $1 WHERE discord_id = $2", safe_hp, discord_id)
+
+
 async def update_player_stats(player_id: int, atk: int = 0, defense: int = 0, spd: int = 0):
     """Increase player combat stats"""
     pool = await get_pool()
@@ -369,6 +394,53 @@ async def leave_faction(discord_id: int):
     pool = await get_pool()
     async with pool.acquire() as conn:
         await conn.execute("UPDATE players SET faction_id = NULL WHERE discord_id = $1", discord_id)
+
+
+async def set_player_faction(discord_id: int, faction_id: int):
+    """Set player's faction (alias for join_faction for compatibility)"""
+    await join_faction(discord_id, faction_id)
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# FACTION WAR HELPERS
+# ═══════════════════════════════════════════════════════════════════════════
+
+async def declare_war(faction_a: int, faction_b: int):
+    """Declare war between two factions"""
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        return await conn.fetchrow(
+            """INSERT INTO faction_wars (faction_a, faction_b, started_at)
+               VALUES ($1, $2, CURRENT_TIMESTAMP)
+               RETURNING *""",
+            faction_a, faction_b
+        )
+
+
+async def get_active_wars():
+    """Get all active faction wars"""
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        return await conn.fetch(
+            "SELECT * FROM faction_wars WHERE ended_at IS NULL"
+        )
+
+
+async def resolve_war(war_id: int, winner_faction_id: int):
+    """Mark a war as ended with a winner"""
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        await conn.execute(
+            """UPDATE faction_wars 
+               SET ended_at = CURRENT_TIMESTAMP, winner = $1
+               WHERE id = $2""",
+            winner_faction_id, war_id
+        )
+
+
+async def claim_territory(territory_key: str, faction_id: int):
+    """Claim/capture a territory for a faction (simplified version)"""
+    await capture_territory(territory_key, faction_id, new_defense=50)
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -596,6 +668,11 @@ async def cancel_trade(trade_id: int):
     pool = await get_pool()
     async with pool.acquire() as conn:
         await conn.execute("DELETE FROM trades WHERE id = $1", trade_id)
+
+
+async def fulfill_trade(trade_id: int, buyer_id: int):
+    """Fulfill/complete a trade (alias for complete_trade for compatibility)"""
+    await complete_trade(trade_id, buyer_id)
 
 
 # ═══════════════════════════════════════════════════════════════════════════
