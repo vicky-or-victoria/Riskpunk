@@ -272,7 +272,7 @@ class MapView(View):
                 embed = RiskEmbed(title="🗺️ RISK CITY MAP", color=NEON_CYAN)
                 embed.description = "Click districts to interact."
                 embed.set_image(url="attachment://map.png")
-                await interaction.edit_original_response(embed=embed, attachments=[file], view=self)
+                await interaction.edit_original_response(embed=embed, files=[file], view=self)
                 return
         
         # Fallback to text
@@ -375,7 +375,7 @@ class ActionView(View):
                 file = discord.File(img, filename="map.png")
                 map_embed = RiskEmbed(title="🗺️ RISK CITY MAP", color=NEON_CYAN)
                 map_embed.set_image(url="attachment://map.png")
-                await interaction.edit_original_response(embed=map_embed, attachments=[file], view=self.parent)
+                await interaction.edit_original_response(embed=map_embed, files=[file], view=self.parent)
                 return
         
         text = await create_text_map(self.player_faction_id)
@@ -420,7 +420,7 @@ class ActionView(View):
                 file = discord.File(img, filename="map.png")
                 map_embed = RiskEmbed(title="🗺️ RISK CITY MAP", color=NEON_CYAN)
                 map_embed.set_image(url="attachment://map.png")
-                await interaction.edit_original_response(embed=map_embed, attachments=[file], view=self.parent)
+                await interaction.edit_original_response(embed=map_embed, files=[file], view=self.parent)
                 return
         
         text = await create_text_map(self.player_faction_id)
@@ -438,7 +438,7 @@ class ActionView(View):
                 file = discord.File(img, filename="map.png")
                 embed = RiskEmbed(title="🗺️ RISK CITY MAP", color=NEON_CYAN)
                 embed.set_image(url="attachment://map.png")
-                await interaction.edit_original_response(embed=embed, attachments=[file], view=self.parent)
+                await interaction.edit_original_response(embed=embed, files=[file], view=self.parent)
                 return
         
         text = await create_text_map(self.player_faction_id)
