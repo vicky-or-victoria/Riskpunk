@@ -1,5 +1,5 @@
 # utils/database.py
-# PostgreSQL/Neon Database Layer
+# PostgreSQL/Neon Database Layer - ENHANCED VERSION
 import asyncpg
 import os
 from typing import Optional
@@ -38,7 +38,7 @@ async def close_pool():
 
 
 async def init_db():
-    """Initialize database tables"""
+    """Initialize database tables - ENHANCED VERSION"""
     pool = await get_pool()
     async with pool.acquire() as conn:
         # ── Players ──────────────────────────────────────────
@@ -100,18 +100,54 @@ async def init_db():
             )
         """)
 
-        # ── Territories ──────────────────────────────────────
+        # ── Territories - ENHANCED ───────────────────────────
         await conn.execute("""
             CREATE TABLE IF NOT EXISTS territories (
-                id          SERIAL PRIMARY KEY,
-                key         TEXT    UNIQUE NOT NULL,
-                name        TEXT    NOT NULL,
-                description TEXT,
-                owner_faction INTEGER REFERENCES factions(id),
-                income      NUMERIC(10, 2) NOT NULL DEFAULT 200,
-                defense     INTEGER NOT NULL DEFAULT 50
+                id              SERIAL PRIMARY KEY,
+                key             TEXT    UNIQUE NOT NULL,
+                name            TEXT    NOT NULL,
+                description     TEXT,
+                owner_faction   INTEGER REFERENCES factions(id),
+                income          NUMERIC(10, 2) NOT NULL DEFAULT 200,
+                defense         INTEGER NOT NULL DEFAULT 50,
+                last_attacked   TIMESTAMP,
+                garrison_size   INTEGER DEFAULT 0,
+                connected_to    TEXT
             )
         """)
+
+        # ── Siege History - NEW ──────────────────────────────
+        await conn.execute("""
+            CREATE TABLE IF NOT EXISTS siege_history (
+                id                  SERIAL PRIMARY KEY,
+                territory_key       TEXT    NOT NULL,
+                attacker_faction    INTEGER REFERENCES factions(id),
+                defender_faction    INTEGER REFERENCES factions(id),
+                started_at          TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                ended_at            TIMESTAMP,
+                result              TEXT,
+                total_cost          NUMERIC(15, 2),
+                participants        TEXT[]
+            )
+        """)
+
+        # ── Combat Log - NEW ─────────────────────────────────
+        await conn.execute("""
+            CREATE TABLE IF NOT EXISTS combat_log (
+                id              SERIAL PRIMARY KEY,
+                player_id       INTEGER REFERENCES players(id),
+                action_type     TEXT    NOT NULL,
+                territory_key   TEXT    NOT NULL,
+                result          TEXT    NOT NULL,
+                credits_spent   NUMERIC(15, 2),
+                credits_gained  NUMERIC(15, 2),
+                xp_gained       INTEGER,
+                hp_lost         INTEGER,
+                timestamp       TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        await conn.execute("CREATE INDEX IF NOT EXISTS idx_combat_log_player ON combat_log(player_id)")
+        await conn.execute("CREATE INDEX IF NOT EXISTS idx_combat_log_timestamp ON combat_log(timestamp)")
 
         # ── Active Trades ───────────────────────────────────
         await conn.execute("""
@@ -215,25 +251,23 @@ async def init_db():
             )
         """)
 
-        # ── Companies ────────────────────────────────────────
-        await conn.execute("""
-            CREATE TABLE IF NOT EXISTS companies (
-                id                  SERIAL PRIMARY KEY,
-                owner_id            INTEGER NOT NULL REFERENCES players(id) ON DELETE CASCADE,
-                company_type        TEXT NOT NULL,
-                name                TEXT NOT NULL,
-                stockpiled_minutes  NUMERIC(15, 2) NOT NULL DEFAULT 0,
-                total_invested      NUMERIC(15, 2) NOT NULL DEFAULT 0,
-                total_earned        NUMERIC(15, 2) NOT NULL DEFAULT 0,
-                last_collect        TIMESTAMP NOT NULL DEFAULT NOW(),
-                created_at          TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )
-        """)
-        await conn.execute("CREATE INDEX IF NOT EXISTS idx_companies_owner ON companies(owner_id)")
-        await conn.execute("CREATE INDEX IF NOT EXISTS idx_companies_type ON companies(company_type)")
 
+# ═══════════════════════════════════════════════════════════════════════════
+# PLAYER HELPERS
+# ═══════════════════════════════════════════════════════════════════════════
 
-# ─── Player Helpers ─────────────────────────────────────────────────────────
+async def ensure_player(discord_id: int, name: str = "Drifter"):
+    """Creates a player if not exists; always returns player row."""
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        row = await conn.fetchrow("SELECT * FROM players WHERE discord_id = $1", discord_id)
+        if row:
+            return row
+        return await conn.fetchrow(
+            "INSERT INTO players (discord_id, name) VALUES ($1, $2) RETURNING *",
+            discord_id, name
+        )
+
 
 async def get_player(discord_id: int):
     pool = await get_pool()
@@ -247,137 +281,253 @@ async def get_player_by_id(player_id: int):
         return await conn.fetchrow("SELECT * FROM players WHERE id = $1", player_id)
 
 
-async def ensure_player(discord_id: int, name: str = "Drifter"):
-    player = await get_player(discord_id)
-    if player:
-        return player
+async def update_player_credits(discord_id: int, delta: float):
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        await conn.execute(
+            "UPDATE players SET credits = GREATEST(0, credits + $1) WHERE discord_id = $2",
+            delta, discord_id
+        )
+
+
+async def update_player_xp(discord_id: int, delta: int):
+    """Updates XP, auto-level-ups if needed. Returns new level."""
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        player = await conn.fetchrow("SELECT * FROM players WHERE discord_id = $1", discord_id)
+        if not player:
+            return 1
+        new_xp = player['xp'] + delta
+        new_level = player['level']
+        threshold = new_level * 500
+        while new_xp >= threshold:
+            new_level += 1
+            new_xp -= threshold
+            threshold = new_level * 500
+        await conn.execute(
+            "UPDATE players SET xp = $1, level = $2 WHERE discord_id = $3",
+            new_xp, new_level, discord_id
+        )
+        return new_level
+
+
+async def update_player_hp(discord_id: int, delta: int):
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        player = await conn.fetchrow("SELECT * FROM players WHERE discord_id = $1", discord_id)
+        if not player:
+            return
+        new_hp = max(0, min(player['max_hp'], player['hp'] + delta))
+        await conn.execute("UPDATE players SET hp = $1 WHERE discord_id = $2", new_hp, discord_id)
+
+
+async def update_player_stats(player_id: int, atk: int = 0, defense: int = 0, spd: int = 0):
+    """Increase player combat stats"""
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        await conn.execute(
+            "UPDATE players SET atk = atk + $1, def = def + $2, spd = spd + $3 WHERE id = $4",
+            atk, defense, spd, player_id
+        )
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# FACTION HELPERS
+# ═══════════════════════════════════════════════════════════════════════════
+
+async def get_faction(faction_id: int):
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        return await conn.fetchrow("SELECT * FROM factions WHERE id = $1", faction_id)
+
+
+async def get_faction_by_key(key: str):
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        return await conn.fetchrow("SELECT * FROM factions WHERE key = $1", key.lower())
+
+
+async def get_all_factions():
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        return await conn.fetch("SELECT * FROM factions")
+
+
+async def get_faction_members(faction_id: int):
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        return await conn.fetch("SELECT * FROM players WHERE faction_id = $1", faction_id)
+
+
+async def join_faction(discord_id: int, faction_id: int):
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        await conn.execute("UPDATE players SET faction_id = $1 WHERE discord_id = $2", faction_id, discord_id)
+
+
+async def leave_faction(discord_id: int):
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        await conn.execute("UPDATE players SET faction_id = NULL WHERE discord_id = $1", discord_id)
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# TERRITORY HELPERS - ENHANCED
+# ═══════════════════════════════════════════════════════════════════════════
+
+async def get_all_territories():
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        return await conn.fetch("SELECT * FROM territories")
+
+
+async def get_territory(key: str):
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        return await conn.fetchrow("SELECT * FROM territories WHERE key = $1", key.lower())
+
+
+async def get_faction_territories(faction_id: int):
+    """Get all territories owned by a faction"""
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        return await conn.fetch("SELECT * FROM territories WHERE owner_faction = $1", faction_id)
+
+
+async def capture_territory(territory_key: str, faction_id: int, new_defense: int = 30):
+    """Capture a territory and set new defense value"""
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        await conn.execute(
+            """UPDATE territories 
+               SET owner_faction = $1, defense = $2, last_attacked = CURRENT_TIMESTAMP 
+               WHERE key = $3""",
+            faction_id, new_defense, territory_key.lower()
+        )
+
+
+async def fortify_territory(territory_key: str, defense_increase: int):
+    """Increase territory defense (max 100)"""
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        await conn.execute(
+            "UPDATE territories SET defense = LEAST(100, defense + $1) WHERE key = $2",
+            defense_increase, territory_key.lower()
+        )
+
+
+async def weaken_territory(territory_key: str, defense_decrease: int):
+    """Decrease territory defense (min 0)"""
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        await conn.execute(
+            "UPDATE territories SET defense = GREATEST(0, defense - $1) WHERE key = $2",
+            defense_decrease, territory_key.lower()
+        )
+
+
+async def update_territory_garrison(territory_key: str, garrison_size: int):
+    """Update garrison size for a territory"""
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        await conn.execute(
+            "UPDATE territories SET garrison_size = $1 WHERE key = $2",
+            garrison_size, territory_key.lower()
+        )
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# COMBAT LOG HELPERS - NEW
+# ═══════════════════════════════════════════════════════════════════════════
+
+async def log_combat(player_id: int, action_type: str, territory_key: str, result: str, 
+                     credits_spent: float = 0, credits_gained: float = 0, 
+                     xp_gained: int = 0, hp_lost: int = 0):
+    """Log combat action for statistics and history"""
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        await conn.execute(
+            """INSERT INTO combat_log 
+               (player_id, action_type, territory_key, result, credits_spent, credits_gained, xp_gained, hp_lost)
+               VALUES ($1, $2, $3, $4, $5, $6, $7, $8)""",
+            player_id, action_type, territory_key, result, credits_spent, credits_gained, xp_gained, hp_lost
+        )
+
+
+async def get_player_combat_history(player_id: int, limit: int = 10):
+    """Get recent combat history for a player"""
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        return await conn.fetch(
+            "SELECT * FROM combat_log WHERE player_id = $1 ORDER BY timestamp DESC LIMIT $2",
+            player_id, limit
+        )
+
+
+async def get_territory_combat_history(territory_key: str, limit: int = 10):
+    """Get recent combat history for a territory"""
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        return await conn.fetch(
+            "SELECT * FROM combat_log WHERE territory_key = $1 ORDER BY timestamp DESC LIMIT $2",
+            territory_key, limit
+        )
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# SIEGE HELPERS - NEW
+# ═══════════════════════════════════════════════════════════════════════════
+
+async def start_siege(territory_key: str, attacker_faction: int, defender_faction: int):
+    """Record the start of a siege"""
     pool = await get_pool()
     async with pool.acquire() as conn:
         return await conn.fetchrow(
-            "INSERT INTO players (discord_id, name) VALUES ($1, $2) RETURNING *",
-            discord_id, name
+            """INSERT INTO siege_history 
+               (territory_key, attacker_faction, defender_faction, started_at)
+               VALUES ($1, $2, $3, CURRENT_TIMESTAMP)
+               RETURNING *""",
+            territory_key, attacker_faction, defender_faction
         )
 
 
-async def update_player_credits(identifier: int, amount: float):
-    """Update player credits. Identifier can be either discord_id or player internal id.
-    We'll try to detect which one it is based on typical Discord ID size."""
-    pool = await get_pool()
-    async with pool.acquire() as conn:
-        # Discord IDs are typically 17-19 digits, internal IDs are small
-        if identifier > 10000000:  # Likely a discord_id
-            await conn.execute(
-                "UPDATE players SET credits = credits + $1 WHERE discord_id = $2",
-                amount, identifier
-            )
-        else:  # Likely internal player id
-            await conn.execute(
-                "UPDATE players SET credits = credits + $1 WHERE id = $2",
-                amount, identifier
-            )
-
-
-
-async def update_player_stats(player_id: int, hp: int = None, atk: int = None, def_: int = None, spd: int = None):
-    pool = await get_pool()
-    updates = []
-    params = []
-    param_count = 1
-    
-    if hp is not None:
-        updates.append(f"hp = ${param_count}")
-        params.append(hp)
-        param_count += 1
-    if atk is not None:
-        updates.append(f"atk = ${param_count}")
-        params.append(atk)
-        param_count += 1
-    if def_ is not None:
-        updates.append(f"def = ${param_count}")
-        params.append(def_)
-        param_count += 1
-    if spd is not None:
-        updates.append(f"spd = ${param_count}")
-        params.append(spd)
-        param_count += 1
-    
-    if updates:
-        params.append(player_id)
-        query = f"UPDATE players SET {', '.join(updates)} WHERE id = ${param_count}"
-        async with pool.acquire() as conn:
-            await conn.execute(query, *params)
-
-
-async def update_player_xp(identifier: int, xp_gain: int):
-    """Update player XP. Identifier can be discord_id or internal player id."""
-    pool = await get_pool()
-    async with pool.acquire() as conn:
-        # Discord IDs are typically 17-19 digits, internal IDs are small
-        if identifier > 10000000:  # Likely a discord_id
-            player = await conn.fetchrow(
-                "UPDATE players SET xp = xp + $1 WHERE discord_id = $2 RETURNING xp, level, id",
-                xp_gain, identifier
-            )
-        else:  # Likely internal player id
-            player = await conn.fetchrow(
-                "UPDATE players SET xp = xp + $1 WHERE id = $2 RETURNING xp, level, id",
-                xp_gain, identifier
-            )
-        
-        if not player:
-            return False
-            
-        new_xp = player['xp']
-        level = player['level']
-        player_id = player['id']
-        xp_needed = level * 1000
-        if new_xp >= xp_needed:
-            await conn.execute(
-                "UPDATE players SET level = level + 1, xp = $1 WHERE id = $2",
-                new_xp - xp_needed, player_id
-            )
-            return True
-        return False
-
-
-async def update_player_rep(player_id: int, rep_change: int):
+async def end_siege(siege_id: int, result: str, total_cost: float):
+    """Record the end of a siege"""
     pool = await get_pool()
     async with pool.acquire() as conn:
         await conn.execute(
-            "UPDATE players SET rep = rep + $1 WHERE id = $2",
-            rep_change, player_id
+            """UPDATE siege_history 
+               SET ended_at = CURRENT_TIMESTAMP, result = $1, total_cost = $2
+               WHERE id = $3""",
+            result, total_cost, siege_id
         )
 
 
-async def heal_player(player_id: int, amount: int):
+async def get_active_sieges():
+    """Get all currently active sieges"""
     pool = await get_pool()
     async with pool.acquire() as conn:
-        await conn.execute(
-            "UPDATE players SET hp = LEAST(hp + $1, max_hp) WHERE id = $2",
-            amount, player_id
+        return await conn.fetch(
+            "SELECT * FROM siege_history WHERE ended_at IS NULL"
         )
 
 
-async def update_player_hp(discord_id: int, hp_change: int):
-    """Update player HP by discord_id (can be positive or negative)"""
+async def get_siege_history(territory_key: str, limit: int = 5):
+    """Get recent siege history for a territory"""
     pool = await get_pool()
     async with pool.acquire() as conn:
-        await conn.execute(
-            "UPDATE players SET hp = GREATEST(0, LEAST(hp + $1, max_hp)) WHERE discord_id = $2",
-            hp_change, discord_id
+        return await conn.fetch(
+            """SELECT * FROM siege_history 
+               WHERE territory_key = $1 
+               ORDER BY started_at DESC 
+               LIMIT $2""",
+            territory_key, limit
         )
 
 
-async def set_player_faction(player_id: int, faction_id: int):
-    pool = await get_pool()
-    async with pool.acquire() as conn:
-        await conn.execute(
-            "UPDATE players SET faction_id = $1 WHERE id = $2",
-            faction_id, player_id
-        )
-
-
-# ─── Implant Helpers ────────────────────────────────────────────────────────
+# ═══════════════════════════════════════════════════════════════════════════
+# IMPLANT HELPERS
+# ═══════════════════════════════════════════════════════════════════════════
 
 async def get_player_implants(player_id: int):
     pool = await get_pool()
@@ -388,12 +538,10 @@ async def get_player_implants(player_id: int):
 async def install_implant(player_id: int, implant_key: str, slot: str):
     pool = await get_pool()
     async with pool.acquire() as conn:
-        return await conn.fetchrow(
-            """INSERT INTO implants (player_id, implant_key, slot) 
-               VALUES ($1, $2, $3) 
-               ON CONFLICT (player_id, slot) DO UPDATE 
-               SET implant_key = $2, installed_at = CURRENT_TIMESTAMP 
-               RETURNING *""",
+        await conn.execute(
+            """INSERT INTO implants (player_id, implant_key, slot)
+               VALUES ($1, $2, $3)
+               ON CONFLICT(player_id, slot) DO UPDATE SET implant_key = $2""",
             player_id, implant_key, slot
         )
 
@@ -407,141 +555,9 @@ async def remove_implant(player_id: int, slot: str):
         )
 
 
-# ─── Faction Helpers ────────────────────────────────────────────────────────
-
-async def get_all_factions():
-    pool = await get_pool()
-    async with pool.acquire() as conn:
-        return await conn.fetch("SELECT * FROM factions ORDER BY id")
-
-
-async def get_faction(faction_id: int):
-    pool = await get_pool()
-    async with pool.acquire() as conn:
-        return await conn.fetchrow("SELECT * FROM factions WHERE id = $1", faction_id)
-
-
-async def get_faction_by_key(key: str):
-    pool = await get_pool()
-    async with pool.acquire() as conn:
-        return await conn.fetchrow("SELECT * FROM factions WHERE key = $1", key)
-
-
-async def get_faction_members(faction_id: int):
-    """Get all players belonging to a faction"""
-    pool = await get_pool()
-    async with pool.acquire() as conn:
-        return await conn.fetch("SELECT * FROM players WHERE faction_id = $1", faction_id)
-
-
-async def set_faction_war(faction_id: int, target_id: int):
-    pool = await get_pool()
-    async with pool.acquire() as conn:
-        await conn.execute(
-            "UPDATE factions SET war_target = $1 WHERE id = $2",
-            target_id, faction_id
-        )
-
-
-async def create_faction_war(faction_a: int, faction_b: int):
-    pool = await get_pool()
-    async with pool.acquire() as conn:
-        return await conn.fetchrow(
-            "INSERT INTO faction_wars (faction_a, faction_b) VALUES ($1, $2) RETURNING *",
-            faction_a, faction_b
-        )
-
-
-async def declare_war(faction_a: int, faction_b: int):
-    """Alias for create_faction_war for compatibility"""
-    return await create_faction_war(faction_a, faction_b)
-
-
-async def resolve_war(war_id: int, winner_id: int):
-    """End a war and declare a winner"""
-    pool = await get_pool()
-    async with pool.acquire() as conn:
-        await conn.execute(
-            "UPDATE faction_wars SET ended_at = CURRENT_TIMESTAMP, winner = $1 WHERE id = $2",
-            winner_id, war_id
-        )
-
-
-async def get_active_wars():
-    pool = await get_pool()
-    async with pool.acquire() as conn:
-        return await conn.fetch("SELECT * FROM faction_wars WHERE ended_at IS NULL")
-
-
-async def end_faction_war(war_id: int, winner_id: int):
-    pool = await get_pool()
-    async with pool.acquire() as conn:
-        await conn.execute(
-            "UPDATE faction_wars SET ended_at = CURRENT_TIMESTAMP, winner = $1 WHERE id = $2",
-            winner_id, war_id
-        )
-
-
-# ─── Territory Helpers ──────────────────────────────────────────────────────
-
-async def get_all_territories():
-    pool = await get_pool()
-    async with pool.acquire() as conn:
-        return await conn.fetch("SELECT * FROM territories ORDER BY id")
-
-
-async def get_territory_by_key(key: str):
-    pool = await get_pool()
-    async with pool.acquire() as conn:
-        return await conn.fetchrow("SELECT * FROM territories WHERE key = $1", key)
-
-
-async def get_territory(territory_id: int):
-    """Get territory by ID"""
-    pool = await get_pool()
-    async with pool.acquire() as conn:
-        return await conn.fetchrow("SELECT * FROM territories WHERE id = $1", territory_id)
-
-
-async def claim_territory(territory_key: str, faction_id: int):
-    """Claim a territory for a faction"""
-    pool = await get_pool()
-    async with pool.acquire() as conn:
-        await conn.execute(
-            "UPDATE territories SET owner_faction = $1 WHERE key = $2",
-            faction_id, territory_key
-        )
-
-
-async def damage_territory(territory_id: int, damage: int):
-    """Reduce territory defense"""
-    pool = await get_pool()
-    async with pool.acquire() as conn:
-        await conn.execute(
-            "UPDATE territories SET defense = GREATEST(0, defense - $1) WHERE id = $2",
-            damage, territory_id
-        )
-
-
-async def set_territory_owner(territory_id: int, faction_id: int):
-    pool = await get_pool()
-    async with pool.acquire() as conn:
-        await conn.execute(
-            "UPDATE territories SET owner_faction = $1 WHERE id = $2",
-            faction_id, territory_id
-        )
-
-
-async def fortify_territory(territory_id: int, defense_boost: int):
-    pool = await get_pool()
-    async with pool.acquire() as conn:
-        await conn.execute(
-            "UPDATE territories SET defense = defense + $1 WHERE id = $2",
-            defense_boost, territory_id
-        )
-
-
-# ─── Trading Helpers ────────────────────────────────────────────────────────
+# ═══════════════════════════════════════════════════════════════════════════
+# TRADE HELPERS
+# ═══════════════════════════════════════════════════════════════════════════
 
 async def create_trade(seller_id: int, item_name: str, quantity: int, price: float):
     pool = await get_pool()
@@ -552,17 +568,26 @@ async def create_trade(seller_id: int, item_name: str, quantity: int, price: flo
         )
 
 
-async def get_open_trades():
+async def get_open_trades(limit: int = 20):
     pool = await get_pool()
     async with pool.acquire() as conn:
-        return await conn.fetch("SELECT * FROM trades WHERE status = 'open' ORDER BY created_at DESC LIMIT 25")
+        return await conn.fetch(
+            "SELECT * FROM trades WHERE status = 'open' ORDER BY created_at DESC LIMIT $1",
+            limit
+        )
 
 
-async def fulfill_trade(trade_id: int, buyer_id: int):
+async def get_trade(trade_id: int):
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        return await conn.fetchrow("SELECT * FROM trades WHERE id = $1", trade_id)
+
+
+async def complete_trade(trade_id: int, buyer_id: int):
     pool = await get_pool()
     async with pool.acquire() as conn:
         await conn.execute(
-            "UPDATE trades SET status = 'fulfilled', buyer_id = $1 WHERE id = $2",
+            "UPDATE trades SET status = 'completed', buyer_id = $1 WHERE id = $2",
             buyer_id, trade_id
         )
 
@@ -570,10 +595,12 @@ async def fulfill_trade(trade_id: int, buyer_id: int):
 async def cancel_trade(trade_id: int):
     pool = await get_pool()
     async with pool.acquire() as conn:
-        await conn.execute("UPDATE trades SET status = 'cancelled' WHERE id = $1", trade_id)
+        await conn.execute("DELETE FROM trades WHERE id = $1", trade_id)
 
 
-# ─── Inventory Helpers ───────────────────────────────────────────────────────
+# ═══════════════════════════════════════════════════════════════════════════
+# INVENTORY HELPERS
+# ═══════════════════════════════════════════════════════════════════════════
 
 async def get_inventory(player_id: int):
     pool = await get_pool()
@@ -615,7 +642,9 @@ async def remove_item(player_id: int, item_name: str, qty: int = 1) -> bool:
         return True
 
 
-# ─── Equipment Helpers ──────────────────────────────────────────────────────
+# ═══════════════════════════════════════════════════════════════════════════
+# EQUIPMENT HELPERS
+# ═══════════════════════════════════════════════════════════════════════════
 
 async def get_equipped_items(player_id: int):
     """Get all equipped items for a player"""
@@ -646,7 +675,9 @@ async def unequip_item(player_id: int, slot: str):
         )
 
 
-# ─── Skill Helpers ───────────────────────────────────────────────────────────
+# ═══════════════════════════════════════════════════════════════════════════
+# SKILL HELPERS
+# ═══════════════════════════════════════════════════════════════════════════
 
 async def get_player_skills(player_id: int):
     pool = await get_pool()
@@ -674,7 +705,9 @@ async def set_skill(player_id: int, skill_key: str, level: int = 1):
         )
 
 
-# ─── Heist Helpers ───────────────────────────────────────────────────────────
+# ═══════════════════════════════════════════════════════════════════════════
+# HEIST HELPERS
+# ═══════════════════════════════════════════════════════════════════════════
 
 async def create_heist(leader_id: int, target: str, reward: float, difficulty: int):
     pool = await get_pool()
@@ -729,7 +762,9 @@ async def advance_heist_phase(heist_id: int, new_phase: str, new_status: str = N
             )
 
 
-# ─── Story Helpers ───────────────────────────────────────────────────────────
+# ═══════════════════════════════════════════════════════════════════════════
+# STORY HELPERS
+# ═══════════════════════════════════════════════════════════════════════════
 
 async def get_story_progress(player_id: int):
     pool = await get_pool()
@@ -755,7 +790,9 @@ async def set_story_progress(player_id: int, chapter: int, node: str, choice: st
             )
 
 
-# ─── Leaderboard ─────────────────────────────────────────────────────────────
+# ═══════════════════════════════════════════════════════════════════════════
+# LEADERBOARD
+# ═══════════════════════════════════════════════════════════════════════════
 
 async def get_leaderboard(sort_by: str = "credits", limit: int = 10):
     col = sort_by if sort_by in ("credits", "level", "rep") else "credits"
@@ -766,7 +803,9 @@ async def get_leaderboard(sort_by: str = "credits", limit: int = 10):
         )
 
 
-# ─── Event Log ───────────────────────────────────────────────────────────────
+# ═══════════════════════════════════════════════════════════════════════════
+# EVENT LOG
+# ═══════════════════════════════════════════════════════════════════════════
 
 async def log_event(event_key: str):
     pool = await get_pool()
@@ -774,7 +813,9 @@ async def log_event(event_key: str):
         await conn.execute("INSERT INTO event_log (event_key) VALUES ($1)", event_key)
 
 
-# ─── PvP Log ─────────────────────────────────────────────────────────────────
+# ═══════════════════════════════════════════════════════════════════════════
+# PVP LOG
+# ═══════════════════════════════════════════════════════════════════════════
 
 async def log_pvp(p1_id: int, p2_id: int, winner_id: int, rounds: int, log_text: str):
     pool = await get_pool()
